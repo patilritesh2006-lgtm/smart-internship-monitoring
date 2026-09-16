@@ -742,7 +742,7 @@ export default function AdminPortal() {
       {/* ════════════════════════════════════ */}
       {/* SCREEN 2: APPLICATIONS WORKFLOW TAB  */}
       {/* ════════════════════════════════════ */}
-      {activeTab === "milestones" && (
+      {(activeTab === "milestones" || activeTab === "agreements") && (
         <div className="space-y-6">
           {/* 4 StatCards (Screen 2) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -901,11 +901,11 @@ export default function AdminPortal() {
         </div>
       )}
 
-      {/* Post Internship Tab */}
-      {activeTab === "reports" && (
+      {/* Post Internship & Employers Tab */}
+      {(activeTab === "reports" || activeTab === "employers") && (
         <GlassCard className="p-6 max-w-2xl">
           <SectionHeader
-            title="Publish Placement Opportunity"
+            title="Publish Placement Opportunity &amp; Manage Employers"
             subtitle="Publish accredited enterprise openings to the university intern directory."
           />
           <form onSubmit={handlePostInternship} className="space-y-4">
@@ -916,12 +916,12 @@ export default function AdminPortal() {
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. AI Engineering Intern"
+                  placeholder="e.g. Frontend Engineering Intern"
                   className="sims-input text-xs"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Company Name</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Company Host</label>
                 <input
                   required
                   value={companyName}
@@ -933,56 +933,35 @@ export default function AdminPortal() {
             </div>
 
             <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Location</label>
+              <input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="e.g. San Francisco, CA (Hybrid)"
+                className="sims-input text-xs"
+              />
+            </div>
+
+            <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Role Description</label>
               <textarea
                 required
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                placeholder="Describe accredited technical responsibilities and expectations..."
                 className="sims-textarea text-xs"
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Stipend (₹/mo)</label>
-                <input
-                  type="number"
-                  value={stipend}
-                  onChange={(e) => setStipend(Number(e.target.value))}
-                  className="sims-input text-xs"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Duration (Weeks)</label>
-                <input
-                  type="number"
-                  value={durationWeeks}
-                  onChange={(e) => setDurationWeeks(Number(e.target.value))}
-                  className="sims-input text-xs"
-                />
-              </div>
-              <div className="flex items-center gap-2 pt-6">
-                <input
-                  type="checkbox"
-                  id="remoteOptAdmin"
-                  checked={isRemote}
-                  onChange={(e) => setIsRemote(e.target.checked)}
-                  className="w-4 h-4 accent-blue-600 rounded"
-                />
-                <label htmlFor="remoteOptAdmin" className="text-xs font-bold text-slate-700">
-                  Remote
-                </label>
-              </div>
-            </div>
-
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                Required Technical Skills (comma separated)
+                Required Technical Skills (Comma-separated)
               </label>
               <input
                 value={requiredSkillsStr}
                 onChange={(e) => setRequiredSkillsStr(e.target.value)}
+                placeholder="e.g. React, TypeScript, FastAPI, Docker"
                 className="sims-input text-xs"
               />
             </div>
@@ -1002,6 +981,91 @@ export default function AdminPortal() {
               {postingInternship ? "Publishing..." : "Publish Placement"}
             </button>
           </form>
+        </GlassCard>
+      )}
+
+      {/* Student Cohorts Tab */}
+      {activeTab === "cohorts" && (
+        <GlassCard className="p-6">
+          <SectionHeader
+            title="Active Student Cohorts &amp; Department Distribution"
+            subtitle="Real-time placement ratios and academic progress across departments."
+            badge="156 Total Interns"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-100">
+              <strong className="text-2xl font-black text-blue-700 block">68 Students</strong>
+              <span className="text-xs font-bold text-slate-700">Computer Science &amp; Eng</span>
+              <span className="text-[10px] text-slate-400 block mt-1">98% Placement Rate</span>
+            </div>
+            <div className="p-4 rounded-xl bg-purple-50/70 border border-purple-100">
+              <strong className="text-2xl font-black text-purple-700 block">45 Students</strong>
+              <span className="text-xs font-bold text-slate-700">Data Science &amp; Analytics</span>
+              <span className="text-[10px] text-slate-400 block mt-1">93% Placement Rate</span>
+            </div>
+            <div className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-100">
+              <strong className="text-2xl font-black text-emerald-700 block">43 Students</strong>
+              <span className="text-xs font-bold text-slate-700">Information Technology</span>
+              <span className="text-[10px] text-slate-400 block mt-1">95% Placement Rate</span>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Logbooks & Hours Tab */}
+      {activeTab === "logbooks" && (
+        <GlassCard className="p-6">
+          <SectionHeader
+            title="Institutional Logbooks &amp; Verified Hours Registry"
+            subtitle="Accredited timesheet log audit trails verified by workplace mentors."
+            badge="Week 8 Cycle"
+          />
+          <div className="space-y-3">
+            {[
+              { name: "Aarav Kulkarni", comp: "NovaTech Solutions", hours: "320.0 hrs", status: "Active & Approved" },
+              { name: "Priya Singh", comp: "CloudScale Inc.", hours: "312.5 hrs", status: "Active & Approved" },
+              { name: "Rohan Joshi", comp: "InfoSys", hours: "308.0 hrs", status: "Active & Approved" },
+            ].map((entry) => (
+              <div key={entry.name} className="p-4 rounded-xl border border-slate-200/80 bg-white flex items-center justify-between">
+                <div>
+                  <strong className="text-sm text-slate-900 block">{entry.name}</strong>
+                  <span className="text-xs text-slate-400">{entry.comp}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200">
+                    {entry.hours}
+                  </span>
+                  <StatusBadge status={entry.status} size="sm" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Compliance & Audit Logs Tab */}
+      {(activeTab === "compliance" || activeTab === "audit") && (
+        <GlassCard className="p-6">
+          <SectionHeader
+            title="Accreditation Compliance &amp; Intervention Logs"
+            subtitle="Deterministic audit records of regulatory interventions, nudges, and formal notices."
+            badge="Audit Sealed"
+          />
+          <div className="space-y-3">
+            {[
+              { title: "Automated Logbook Submission Reminder Sent", target: "Aarav Kulkarni (NovaTech)", time: "Yesterday, 9:00 AM", status: "Optimal" },
+              { title: "Mid-Term Evaluation Window Sign-off Initiated", target: "All Faculty Supervisors", time: "Oct 20, 2026", status: "Active & Approved" },
+              { title: "Workplace Agreement Verification Completed", target: "Apex Cloud Systems", time: "Oct 18, 2026", status: "Verified" },
+            ].map((log, i) => (
+              <div key={i} className="p-4 rounded-xl border border-slate-200/80 bg-slate-50 flex items-center justify-between">
+                <div>
+                  <strong className="text-xs text-slate-900 block">{log.title}</strong>
+                  <span className="text-[10px] text-slate-400">{log.target} • {log.time}</span>
+                </div>
+                <StatusBadge status={log.status} size="sm" />
+              </div>
+            ))}
+          </div>
         </GlassCard>
       )}
 

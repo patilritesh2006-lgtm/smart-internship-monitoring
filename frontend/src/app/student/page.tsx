@@ -1141,6 +1141,179 @@ export default function StudentPortal() {
       )}
 
       {/* ════════════════════════════════════ */}
+      {/* APPLICATIONS / INTERNSHIPS TAB      */}
+      {/* ════════════════════════════════════ */}
+      {activeTab === "internships" && (
+        <div className="space-y-6">
+          <GlassCard className="p-6">
+            <SectionHeader
+              title="Active Placement & Applications"
+              subtitle="Track accredited corporate placements and employer application lifecycles."
+              badge={`${applications.length || 1} Active Placement`}
+            />
+
+            {/* Active Placement Card */}
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-50/80 to-indigo-50/50 border border-blue-100 mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-blue-600 text-white font-black text-base flex items-center justify-center shadow-xs">
+                    NS
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-extrabold text-slate-900">{companyName}</h3>
+                      <StatusBadge status="Active & Approved" />
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Software Engineering Intern • Full-time
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setActiveTab("timesheets")}
+                  className="btn-primary text-xs self-start sm:self-auto"
+                >
+                  Log Hours &amp; Timesheet
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-blue-100/80">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Faculty Supervisor</span>
+                  <strong className="text-slate-800">Dr. Mehta</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Workplace Mentor</span>
+                  <strong className="text-slate-800">Priya Sharma</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Department</span>
+                  <strong className="text-slate-800">Core Systems</strong>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Logged</span>
+                  <strong className="text-blue-700 font-mono">320.0 hrs</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Available Placements / Listings */}
+            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
+              Partner Employer Listings &amp; Opportunities
+            </h4>
+            <div className="space-y-3">
+              {(openInternships.length > 0 ? openInternships : [
+                {
+                  id: "sample-1",
+                  title: "Cloud Infrastructure Intern",
+                  company: { name: "Apex Cloud Systems" },
+                  location: "San Jose, CA (Hybrid)",
+                  required_skills: ["Docker", "Kubernetes", "Python", "AWS"],
+                },
+                {
+                  id: "sample-2",
+                  title: "Full Stack Engineering Intern",
+                  company: { name: "DataFlow Labs" },
+                  location: "Seattle, WA (Remote)",
+                  required_skills: ["React", "TypeScript", "FastAPI", "PostgreSQL"],
+                }
+              ]).map((opp: any) => (
+                <div
+                  key={opp.id}
+                  className="p-4 rounded-xl border border-slate-200/80 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-blue-300 transition-all"
+                >
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <strong className="text-sm text-slate-900">{opp.title}</strong>
+                      <span className="text-xs font-medium text-slate-500">• {opp.company?.name}</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">{opp.location || "On-site"}</p>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {(opp.required_skills || []).map((sk: string) => (
+                        <span key={sk} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium">
+                          {sk}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                    <button
+                      onClick={() => {
+                        handleAnalyzeGap(opp);
+                        setActiveTab("feedback");
+                      }}
+                      className="btn-secondary text-xs"
+                    >
+                      Analyze Skill Match
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════ */}
+      {/* MESSAGES & SUPERVISOR COMMS TAB     */}
+      {/* ════════════════════════════════════ */}
+      {activeTab === "messages" && (
+        <div className="space-y-6">
+          <GlassCard className="p-6 max-w-3xl">
+            <SectionHeader
+              title="Supervisor &amp; Workplace Communications"
+              subtitle="Official academic advisory and workplace check-in messages."
+              badge="Active Channel"
+            />
+
+            <div className="space-y-4 mb-6">
+              <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-100 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                  DM
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <strong className="text-xs text-slate-900">Dr. Mehta (Faculty Supervisor)</strong>
+                    <span className="text-[10px] text-slate-400">Oct 22, 2026 • 2:15 PM</span>
+                  </div>
+                  <p className="text-xs text-slate-700 leading-relaxed mt-1">
+                    Please make sure to include the microservices architecture diagram and your test coverage metrics in your Week 8 submission report.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                  PS
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <strong className="text-xs text-slate-900">Priya Sharma (Workplace Mentor)</strong>
+                    <span className="text-[10px] text-slate-400">Oct 21, 2026 • 4:40 PM</span>
+                  </div>
+                  <p className="text-xs text-slate-700 leading-relaxed mt-1">
+                    Great progress on the token serialization sprint! The engineering lead approved your PR #142 this morning.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick reply */}
+            <div className="flex gap-2">
+              <input
+                placeholder="Reply to faculty supervisor or workplace mentor..."
+                className="sims-input flex-1 text-xs"
+              />
+              <button className="btn-primary text-xs inline-flex items-center gap-1.5">
+                <Send size={14} />
+                <span>Send</span>
+              </button>
+            </div>
+          </GlassCard>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════ */}
       {/* SETTINGS / PROFILE TAB              */}
       {/* ════════════════════════════════════ */}
       {activeTab === "settings" && (

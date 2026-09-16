@@ -78,6 +78,19 @@ export function Sidebar({
   const { user, logout } = useAuth();
   const role = user?.role?.toUpperCase();
 
+  // Handle ESC key to close mobile drawer
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen && onClose) {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   // Define role-specific navigation sections matching Stitch design
   const getNavSections = (): NavSection[] => {
     if (role === "STUDENT") {
@@ -144,7 +157,13 @@ export function Sidebar({
   const portalBadge = role === "MENTOR" ? "FACULTY" : role === "ADMIN" ? "v2.4" : undefined;
 
   return (
-    <aside className={`sims-sidebar ${isOpen ? "drawer-open" : ""}`}>
+    <aside
+      id="dashboard-sidebar"
+      aria-label="Main Navigation"
+      role={isOpen ? "dialog" : undefined}
+      aria-modal={isOpen ? "true" : undefined}
+      className={`sims-sidebar pt-[env(safe-area-inset-top,0px)] pb-[env(safe-area-inset-bottom,0px)] ${isOpen ? "drawer-open" : ""}`}
+    >
       {/* Brand Header */}
       <div className="px-4 py-3.5 border-b border-slate-100 flex items-center justify-between">
         <SimsLogo
@@ -157,7 +176,7 @@ export function Sidebar({
         {onClose && (
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 lg:hidden transition-all-fast"
+            className="w-10 h-10 -mr-1 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 lg:hidden flex items-center justify-center transition-all-fast"
             aria-label="Close navigation drawer"
           >
             <X size={20} />
@@ -167,9 +186,9 @@ export function Sidebar({
 
       {/* Active Role Selector Pill (Stitch UI) */}
       <div className="px-3 pt-3 pb-1">
-        <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between">
+        <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between shadow-xs">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+            <div className="w-7 h-7 rounded-lg bg-blue-100/70 flex items-center justify-center text-blue-600 flex-shrink-0">
               <User size={15} />
             </div>
             <div className="min-w-0">
@@ -187,11 +206,11 @@ export function Sidebar({
       </div>
 
       {/* Navigation Groups */}
-      <nav className="flex-1 px-1 py-2 overflow-y-auto space-y-4">
+      <nav className="flex-1 px-2.5 py-2 overflow-y-auto space-y-4">
         {navSections.map((section, sIdx) => (
           <div key={sIdx}>
             {section.sectionTitle && (
-              <div className="px-4 pt-2 pb-1.5 text-[10px] font-bold text-slate-400 tracking-wider uppercase">
+              <div className="px-3.5 pt-2 pb-1.5 text-[10px] font-bold text-slate-400 tracking-wider uppercase">
                 {section.sectionTitle}
               </div>
             )}
@@ -205,7 +224,7 @@ export function Sidebar({
                       onTabChange(item.id);
                       onClose?.();
                     }}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-medium transition-all ${
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl text-xs sm:text-[13px] font-medium transition-all ${
                       isActive
                         ? "bg-blue-600 text-white font-semibold shadow-xs"
                         : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
@@ -223,7 +242,7 @@ export function Sidebar({
                         <span
                           className={`text-[10px] px-2 py-0.5 rounded-full font-bold leading-tight ${
                             isActive
-                              ? "bg-blue-700/80 text-white border border-blue-400/30"
+                              ? "bg-blue-700/90 text-white border border-blue-400/30"
                               : item.badgeCls || "bg-slate-100 text-slate-600"
                           }`}
                         >
@@ -231,7 +250,7 @@ export function Sidebar({
                         </span>
                       )}
                       {item.hasDot && (
-                        <span className="w-2 h-2 rounded-full bg-blue-500" />
+                        <span className={`w-2 h-2 rounded-full ${isActive ? "bg-white" : "bg-blue-500"}`} />
                       )}
                     </div>
                   </button>
@@ -245,12 +264,17 @@ export function Sidebar({
       {/* Bottom Actions */}
       <div className="p-3 border-t border-slate-100 space-y-1">
         <button
-          onClick={() => onTabChange("settings")}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium ${
-            activeTab === "settings" ? "bg-slate-100 text-slate-900 font-semibold" : "text-slate-600 hover:bg-slate-50"
+          onClick={() => {
+            onTabChange("settings");
+            onClose?.();
+          }}
+          className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-[13px] font-medium transition-all ${
+            activeTab === "settings"
+              ? "bg-blue-600 text-white font-semibold shadow-xs"
+              : "text-slate-600 hover:bg-slate-100/80 hover:text-slate-900"
           }`}
         >
-          <Settings size={16} className="text-slate-500" />
+          <Settings size={16} className={activeTab === "settings" ? "text-white" : "text-slate-500"} />
           <span>Settings</span>
         </button>
         <button
@@ -258,7 +282,7 @@ export function Sidebar({
             onClose?.();
             logout();
           }}
-          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-600 transition-all-fast"
+          className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-2xl text-xs sm:text-[13px] font-medium text-red-500 hover:bg-red-50 hover:text-red-600 transition-all-fast"
         >
           <LogOut size={16} />
           <span>Logout</span>

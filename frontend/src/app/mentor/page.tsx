@@ -228,7 +228,7 @@ export default function MentorPortal() {
       {/* ════════════════════════════════════ */}
       {/* SCREEN 5: FACULTY SUPERVISOR WORKSPACE*/}
       {/* ════════════════════════════════════ */}
-      {activeTab === "overview" && (
+      {(activeTab === "overview" || activeTab === "students") && (
         <div className="space-y-6">
           {/* Header Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/85 backdrop-blur-md p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs">
@@ -720,11 +720,11 @@ export default function MentorPortal() {
         </div>
       )}
 
-      {/* Reports tab */}
-      {activeTab === "reports" && (
+      {/* Reports & Evaluations Tab */}
+      {(activeTab === "reports" || activeTab === "evaluations") && (
         <GlassCard className="p-6">
           <SectionHeader
-            title="Pending Weekly Timesheet Submissions"
+            title="Pending Weekly Timesheet Submissions &amp; Evaluations"
             badge={`${pendingReports.length} Reports in Queue`}
           />
           <div className="space-y-3">
@@ -746,6 +746,120 @@ export default function MentorPortal() {
                 >
                   Grade Submission
                 </button>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Messages Tab */}
+      {activeTab === "messages" && (
+        <GlassCard className="p-6 max-w-3xl">
+          <SectionHeader
+            title="Mentor &amp; Faculty Coordination Channel"
+            subtitle="Direct communication with enterprise workplace mentors and institutional advisors."
+            badge="Live Feed"
+          />
+          <div className="space-y-3 mb-6">
+            {[
+              { sender: "Priya Sharma (NovaTech)", time: "Yesterday, 4:15 PM", text: "Aarav has successfully completed the Week 7 logbook and sprint deliverables. Verified 40 hours." },
+              { sender: "Sarah Jenkins (CloudScale)", time: "Oct 20, 2026", text: "Priya Singh's failover architecture testing is progressing ahead of schedule." },
+              { sender: "Vikram Rao (InfoSys)", time: "Oct 19, 2026", text: "Rohan Joshi's mid-term data analytics evaluation is ready for your signature." },
+            ].map((msg, i) => (
+              <div key={i} className="p-4 rounded-xl bg-slate-50 border border-slate-200/70">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <strong className="text-slate-900">{msg.sender}</strong>
+                  <span className="text-[10px] text-slate-400">{msg.time}</span>
+                </div>
+                <p className="text-xs text-slate-700">{msg.text}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input
+              placeholder="Send message to workplace mentors..."
+              className="sims-input flex-1 text-xs"
+            />
+            <button className="btn-primary text-xs">Send</button>
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Companies Tab */}
+      {activeTab === "companies" && (
+        <GlassCard className="p-6">
+          <SectionHeader
+            title="Partner Companies &amp; Enterprise Hosts"
+            subtitle="Accredited workplace employers hosting students for Academic Cycle 2026."
+            badge="18 Verified Partners"
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              { name: "NovaTech Solutions", dept: "Core Systems & Platform", students: 8, location: "San Francisco, CA" },
+              { name: "CloudScale Inc.", dept: "Cloud Architecture & SRE", students: 6, location: "Austin, TX" },
+              { name: "InfoSys Enterprises", dept: "Data Analytics & AI", students: 5, location: "New York, NY" },
+              { name: "Apex Cloud Systems", dept: "DevOps & Infrastructure", students: 3, location: "San Jose, CA" },
+              { name: "DataFlow Labs", dept: "Full Stack Engineering", students: 2, location: "Seattle, WA" },
+            ].map((comp) => (
+              <div key={comp.name} className="p-4 rounded-xl border border-slate-200/80 bg-white">
+                <strong className="text-sm text-slate-900 block">{comp.name}</strong>
+                <span className="text-xs text-slate-500 block mb-2">{comp.dept}</span>
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100">
+                  <span className="text-slate-400">{comp.location}</span>
+                  <span className="text-blue-600 font-bold">{comp.students} Interns</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Analytics Tab */}
+      {activeTab === "analytics" && (
+        <GlassCard className="p-6">
+          <SectionHeader
+            title="Cohort Performance &amp; Attention Analytics"
+            subtitle="Real-time deterministic progress score distribution across all assigned students."
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+              <div className="text-3xl font-black text-emerald-700">91.6%</div>
+              <div className="text-xs font-semibold text-emerald-800 mt-1">On-Track Compliance</div>
+            </div>
+            <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-center">
+              <div className="text-3xl font-black text-blue-700">38.4 hrs</div>
+              <div className="text-xs font-semibold text-blue-800 mt-1">Avg Weekly Hours</div>
+            </div>
+            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-center">
+              <div className="text-3xl font-black text-amber-700">1 Student</div>
+              <div className="text-xs font-semibold text-amber-800 mt-1">Intervention Required</div>
+            </div>
+          </div>
+        </GlassCard>
+      )}
+
+      {/* Milestones Tab */}
+      {activeTab === "milestones" && (
+        <GlassCard className="p-6">
+          <SectionHeader
+            title="Institutional Academic Calendar &amp; Milestones"
+            subtitle="Official accreditation deadlines for the 2026 Internship Term."
+          />
+          <div className="space-y-3">
+            {[
+              { title: "Mid-Term Evaluation Sign-off", date: "Nov 02, 2026", days: "14 days left", status: "Upcoming" },
+              { title: "Final Industry Project Presentation", date: "Nov 28, 2026", days: "40 days left", status: "Scheduled" },
+              { title: "Accredited Grade Submission Deadline", date: "Dec 10, 2026", days: "52 days left", status: "Draft" },
+            ].map((m) => (
+              <div key={m.title} className="p-4 rounded-xl border border-slate-200/80 bg-white flex items-center justify-between">
+                <div>
+                  <strong className="text-sm text-slate-900 block">{m.title}</strong>
+                  <span className="text-xs text-slate-400">{m.date}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-bold text-blue-600 block">{m.days}</span>
+                  <StatusBadge status={m.status} size="sm" />
+                </div>
               </div>
             ))}
           </div>

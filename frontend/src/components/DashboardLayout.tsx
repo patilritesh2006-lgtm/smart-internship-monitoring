@@ -5,10 +5,12 @@ import { Sidebar } from "./Sidebar";
 import { TopHeader } from "./TopHeader";
 import { useAuth } from "@/lib/auth";
 import {
+  Award,
   BarChart2,
   BookOpen,
   Briefcase,
   Clock,
+  FileText,
   Flag,
   MessageSquare,
   PlusCircle,
@@ -41,51 +43,56 @@ export function DashboardLayout({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { user } = useAuth();
 
-  // Role-specific bottom navigation tabs
+  // Role-specific bottom navigation tabs synchronized with Sidebar IDs
   const getBottomNavItems = () => {
     const role = user?.role?.toUpperCase();
     if (role === "STUDENT") {
       return [
-        { id: "overview",   label: "Home",       icon: <BarChart2 size={18} /> },
-        { id: "timesheets", label: "Timesheet",  icon: <Clock size={18} /> },
-        { id: "milestones", label: "Milestones", icon: <Flag size={18} /> },
-        { id: "feedback",   label: "Skills",     icon: <TrendingUp size={18} /> },
-        { id: "settings",   label: "Profile",    icon: <Settings size={18} /> },
+        { id: "overview",    label: "Home",        icon: <BarChart2 size={19} /> },
+        { id: "internships", label: "Applications",icon: <Briefcase size={19} /> },
+        { id: "timesheets",  label: "Timesheet",   icon: <Clock size={19} /> },
+        { id: "feedback",    label: "Evaluations", icon: <Award size={19} /> },
+        { id: "settings",    label: "Profile",     icon: <Settings size={19} /> },
       ];
     }
     if (role === "MENTOR") {
       return [
-        { id: "overview",   label: "Overview",   icon: <BarChart2 size={18} /> },
-        { id: "milestones", label: "Students",   icon: <Users size={18} /> },
-        { id: "reports",    label: "Reports",    icon: <BookOpen size={18} /> },
-        { id: "feedback",   label: "Feedback",   icon: <MessageSquare size={18} /> },
-        { id: "settings",   label: "Settings",   icon: <Settings size={18} /> },
+        { id: "overview",    label: "Overview",    icon: <BarChart2 size={19} /> },
+        { id: "students",    label: "Students",    icon: <Users size={19} /> },
+        { id: "reports",     label: "Reviews",     icon: <BookOpen size={19} /> },
+        { id: "evaluations", label: "Evaluations", icon: <Award size={19} /> },
+        { id: "settings",    label: "Settings",    icon: <Settings size={19} /> },
       ];
     }
     // ADMIN or default
     return [
-      { id: "overview",   label: "Dashboard",  icon: <BarChart2 size={18} /> },
-      { id: "milestones", label: "Analytics",  icon: <TrendingUp size={18} /> },
-      { id: "reports",    label: "Post Job",   icon: <PlusCircle size={18} /> },
-      { id: "feedback",   label: "Mentors",    icon: <Users size={18} /> },
-      { id: "settings",   label: "Settings",   icon: <Settings size={18} /> },
+      { id: "overview",    label: "Command",     icon: <BarChart2 size={19} /> },
+      { id: "agreements",  label: "Agreements",  icon: <FileText size={19} /> },
+      { id: "cohorts",     label: "Cohorts",     icon: <Users size={19} /> },
+      { id: "reports",     label: "Postings",    icon: <PlusCircle size={19} /> },
+      { id: "settings",    label: "Settings",    icon: <Settings size={19} /> },
     ];
   };
 
   const navTabs = getBottomNavItems();
 
   return (
-    <div className="sims-shell">
+    <div className="sims-shell min-h-screen bg-transparent overflow-x-hidden">
       {/* Mobile backdrop for drawer */}
       {drawerOpen && (
         <div
           className="sims-backdrop"
           onClick={() => setDrawerOpen(false)}
-          aria-hidden="true"
+          aria-label="Close navigation overlay"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Escape" || e.key === "Enter") setDrawerOpen(false);
+          }}
         />
       )}
 
-      {/* Responsive Sidebar / Drawer */}
+      {/* Responsive Sidebar / Mobile Slide-in Drawer */}
       <Sidebar
         activeTab={activeTab}
         onTabChange={(tab) => {
@@ -106,12 +113,22 @@ export function DashboardLayout({
           notificationCount={notificationCount}
           onMenuToggle={() => setDrawerOpen((prev) => !prev)}
         />
-        <main className="sims-content pb-20 lg:pb-6">{children}</main>
+        <main className="sims-content">{children}</main>
 
-        {/* Mobile Bottom Navigation Bar (hidden on lg+) */}
-        <nav className="bottom-nav lg:hidden" aria-label="Mobile Navigation">
+        {/* Mobile Bottom Navigation Bar (visible below 1024px) */}
+        <nav
+          className="bottom-nav lg:hidden"
+          aria-label="Mobile Bottom Navigation"
+          role="navigation"
+        >
           {navTabs.map((item) => {
-            const isActive = activeTab === item.id;
+            // Map tab matching if activeTab is a sub-tab
+            const isActive =
+              activeTab === item.id ||
+              (item.id === "internships" && activeTab === "milestones") ||
+              (item.id === "students" && activeTab === "milestones") ||
+              (item.id === "agreements" && activeTab === "milestones");
+
             return (
               <button
                 key={item.id}
@@ -121,9 +138,14 @@ export function DashboardLayout({
                 }}
                 className={`bottom-nav-item ${isActive ? "active" : ""}`}
                 aria-current={isActive ? "page" : undefined}
+                aria-label={item.label}
               >
-                {item.icon}
-                <span className="truncate max-w-[60px]">{item.label}</span>
+                <div className="relative">
+                  {item.icon}
+                </div>
+                <span className="truncate max-w-[64px] text-[10px] leading-tight">
+                  {item.label}
+                </span>
               </button>
             );
           })}
