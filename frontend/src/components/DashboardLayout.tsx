@@ -18,6 +18,7 @@ import {
 
 interface DashboardLayoutProps {
   title: string;
+  subtitle?: string;
   activeTab: string;
   onTabChange: (tab: string) => void;
   brandName?: string;
@@ -28,6 +29,7 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({
   title,
+  subtitle,
   activeTab,
   onTabChange,
   brandName,
@@ -99,6 +101,7 @@ export function DashboardLayout({
       <div className="sims-main">
         <TopHeader
           title={title}
+          subtitle={subtitle}
           notificationCount={notificationCount}
           onMenuToggle={() => setDrawerOpen((prev) => !prev)}
         />
