@@ -145,9 +145,11 @@ class ApplicationCreate(BaseModel):
 
 
 class ApplicationReview(BaseModel):
-    status: str  # "APPROVED" or "REJECTED"
+    status: Optional[str] = None  # "APPROVED" or "REJECTED"
+    action: Optional[str] = None  # "APPROVED", "ACCEPTED" or "REJECTED"
     mentor_id: Optional[int] = None
     review_notes: Optional[str] = None
+
 
 
 class ApplicationOut(BaseModel):
@@ -353,6 +355,24 @@ class StudentDetailOut(BaseModel):
     interventions: List[InterventionOut] = []
 
 
+class DepartmentAnalytics(BaseModel):
+    department: str
+    student_count: int
+    active_internships: int
+    completion_rate: float
+    average_attention_score: float
+
+
+class LifecycleStages(BaseModel):
+    applications_total: int
+    applications_pending: int
+    applications_approved: int
+    active_internships: int
+    reports_submitted: int
+    reports_reviewed: int
+    completed_internships: int
+
+
 class InstitutionalAnalyticsSchema(BaseModel):
     total_students: int
     total_internships: int
@@ -362,4 +382,10 @@ class InstitutionalAnalyticsSchema(BaseModel):
     monitor_count: int
     needs_attention_count: int
     average_attention_score: float
+    pending_mentor_allocations: int = 0
+    completed_internships: int = 0
+    task_completion_rate: float = 0.0
+    lifecycle: Optional[LifecycleStages] = None
+    departments: List[DepartmentAnalytics] = []
+
 

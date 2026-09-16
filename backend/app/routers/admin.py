@@ -11,12 +11,15 @@ from backend.app.models import (
     Student,
     Task,
     User,
+    WeeklyReport,
 )
 from backend.app.routers.students import compute_student_attention_metrics
 from backend.app.schemas import (
     ApplicationOut,
     ApplicationReview,
+    DepartmentAnalytics,
     InstitutionalAnalyticsSchema,
+    LifecycleStages,
     MentorOut,
 )
 
@@ -67,7 +70,11 @@ def review_application(
     if not app:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Application not found")
 
-    status_upper = payload.status.upper()
+    raw_status = payload.status or payload.action or "APPROVED"
+    status_upper = raw_status.upper()
+    if status_upper == "ACCEPTED":
+        status_upper = "APPROVED"
+
     if status_upper not in ["APPROVED", "REJECTED"]:
         raise HTTPException(status_code=400, detail="Status must be APPROVED or REJECTED")
 
@@ -151,11 +158,22 @@ def get_institutional_analytics(
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin),
 ):
-    """Computes institution-wide metrics and cohort attention distribution."""
+    """Computes institution-wide metrics, cohort attention distribution, lifecycle flow, and department overviews."""
     total_students = db.query(Student).count()
     total_internships = db.query(Internship).count()
     active_internships = db.query(Internship).filter(Internship.status == "ACTIVE").count()
+    completed_internships = db.query(Internship).filter(Internship.status == "COMPLETED").count()
     pending_applications = db.query(Application).filter(Application.status == "PENDING").count()
+    approved_applications = db.query(Application).filter(Application.status == "APPROVED").count()
+    total_applications = db.query(Application).count()
+    pending_mentor_allocations = db.query(Internship).filter(Internship.status == "ACTIVE", Internship.mentor_id == None).count()
+
+    reports_submitted = db.query(WeeklyReport).filter(WeeklyReport.status == "SUBMITTED").count()
+    reports_reviewed = db.query(WeeklyReport).filter(WeeklyReport.status == "REVIEWED").count()
+
+    total_tasks = db.query(Task).count()
+    completed_tasks = db.query(Task).filter(Task.is_completed == True).count()
+    task_completion_rate = round((completed_tasks / total_tasks * 100), 1) if total_tasks > 0 else 0.0
 
     active_interns = (
         db.query(Student)
@@ -184,6 +202,59 @@ def get_institutional_analytics(
 
     avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
 
+    # Department breakdown
+    students_all = db.query(Student).all()
+    departments_map = {}
+    for stu in students_all:
+        dept = stu.department or "Computer Science & Engineering"
+        if dept not in departments_map:
+            departments_map[dept] = {"students": [], "active_placements": 0, "scores": []}
+        departments_map[dept]["students"].append(stu)
+        has_active = any(i.status == "ACTIVE" for i in stu.active_internships)
+        if has_active:
+            departments_map[dept]["active_placements"] += 1
+            try:
+                m = compute_student_attention_metrics(stu.id, db)
+                departments_map[dept]["scores"].append(m.attention_score)
+            except Exception:
+                pass
+
+    departments_out = []
+    for dept_name, info in departments_map.items():
+        s_count = len(info["students"])
+        avg_dept_score = (
+            round(sum(info["scores"]) / len(info["scores"]), 1) if info["scores"] else 80.0
+        )
+        dept_tasks = (
+            db.query(Task)
+            .join(Student, Task.student_id == Student.id)
+            .filter(Student.department == dept_name)
+            .all()
+        )
+        dept_tasks_comp = sum(1 for t in dept_tasks if t.is_completed)
+        dept_comp_rate = (
+            round((dept_tasks_comp / len(dept_tasks) * 100), 1) if dept_tasks else 0.0
+        )
+        departments_out.append(
+            DepartmentAnalytics(
+                department=dept_name,
+                student_count=s_count,
+                active_internships=info["active_placements"],
+                completion_rate=dept_comp_rate,
+                average_attention_score=avg_dept_score,
+            )
+        )
+
+    lifecycle_data = LifecycleStages(
+        applications_total=total_applications,
+        applications_pending=pending_applications,
+        applications_approved=approved_applications,
+        active_internships=active_internships,
+        reports_submitted=reports_submitted,
+        reports_reviewed=reports_reviewed,
+        completed_internships=completed_internships,
+    )
+
     return InstitutionalAnalyticsSchema(
         total_students=total_students,
         total_internships=total_internships,
@@ -193,4 +264,10 @@ def get_institutional_analytics(
         monitor_count=monitor_count,
         needs_attention_count=needs_attention_count,
         average_attention_score=avg_score,
+        pending_mentor_allocations=pending_mentor_allocations,
+        completed_internships=completed_internships,
+        task_completion_rate=task_completion_rate,
+        lifecycle=lifecycle_data,
+        departments=departments_out,
     )
+
