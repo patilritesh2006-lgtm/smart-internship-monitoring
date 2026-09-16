@@ -1,0 +1,440 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Google Inter font ───────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --sims-blue: #2563eb;
+  --sims-blue-hover: #1d4ed8;
+  --sims-sidebar-w: 240px;
+  --sims-header-h: 56px;
+}
+
+/* ── Base reset ───────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { overflow-x: hidden; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: #f1f5f9;
+  color: #1e293b;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* ── Shell ────────────────────────────────────────── */
+.sims-shell {
+  display: flex;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* ── Sidebar — mobile-first ───────────────────────── */
+/* Default: off-screen drawer (mobile) */
+.sims-sidebar {
+  width: var(--sims-sidebar-w);
+  min-height: 100vh;
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 50;
+  /* Hidden off-screen on mobile */
+  transform: translateX(-100%);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Drawer open state (mobile) */
+.sims-sidebar.drawer-open {
+  transform: translateX(0);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+}
+
+/* Desktop: always visible */
+@media (min-width: 1024px) {
+  .sims-sidebar {
+    transform: translateX(0) !important;
+    box-shadow: none;
+    z-index: 40;
+  }
+}
+
+/* ── Main content area ────────────────────────────── */
+.sims-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #f1f5f9;
+  /* Mobile: full width */
+  margin-left: 0;
+  width: 100%;
+}
+
+/* Desktop: offset for sidebar */
+@media (min-width: 1024px) {
+  .sims-main {
+    margin-left: var(--sims-sidebar-w);
+    width: calc(100% - var(--sims-sidebar-w));
+  }
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.sims-header {
+  height: var(--sims-header-h);
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+@media (min-width: 640px) {
+  .sims-header { padding: 0 24px; }
+}
+
+/* ── Content area ──────────────────────────────────── */
+.sims-content {
+  flex: 1;
+  padding: 16px;
+  overflow-x: hidden;
+  /* Extra bottom padding on mobile for bottom nav */
+  padding-bottom: 84px;
+}
+
+@media (min-width: 640px) {
+  .sims-content { padding: 20px; }
+}
+
+@media (min-width: 1024px) {
+  .sims-content {
+    padding: 24px;
+    padding-bottom: 24px;
+  }
+}
+
+/* ── Mobile backdrop overlay ──────────────────────── */
+.sims-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+/* ── Bottom Navigation ────────────────────────────── */
+.bottom-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  align-items: stretch;
+  /* Safe area for notched phones */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (min-width: 1024px) {
+  .bottom-nav { display: none; }
+}
+
+.bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px 6px;
+  gap: 3px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  position: relative;
+  transition: color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 56px;
+}
+
+.bottom-nav-item.active {
+  color: #2563eb;
+}
+
+.bottom-nav-item.active::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 20%;
+  right: 20%;
+  height: 2.5px;
+  background: #2563eb;
+  border-radius: 0 0 3px 3px;
+}
+
+/* ── White card ────────────────────────────────────── */
+.sims-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+/* ── Blue hero banner ──────────────────────────────── */
+.sims-hero {
+  background: linear-gradient(135deg, #1e40af 0%, #2563eb 60%, #3b82f6 100%);
+  border-radius: 12px;
+  color: #ffffff;
+}
+
+/* ── Status badge colours ──────────────────────────── */
+.badge-on-track {
+  background: #d1fae5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+.badge-monitor {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+.badge-needs-attention {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+/* ── Nav item (sidebar) ────────────────────────────── */
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+  margin: 1px 8px;
+  border: none;
+  background: transparent;
+  width: calc(100% - 16px);
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+.nav-item:hover { background: #f1f5f9; color: #1e293b; }
+.nav-item.active { background: #2563eb; color: #ffffff; }
+
+/* ── Progress bar ──────────────────────────────────── */
+.progress-bar {
+  height: 8px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+.progress-fill-green  { background: #10b981; }
+.progress-fill-amber  { background: #f59e0b; }
+.progress-fill-red    { background: #ef4444; }
+.progress-fill-blue   { background: #2563eb; }
+
+/* ── Metric card ───────────────────────────────────── */
+.metric-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+@media (min-width: 640px) {
+  .metric-card { padding: 20px; }
+}
+
+/* ── Table ─────────────────────────────────────────── */
+.sims-table { width: 100%; border-collapse: collapse; }
+.sims-table th {
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+.sims-table td {
+  padding: 12px 12px;
+  font-size: 13.5px;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+}
+.sims-table tr:last-child td { border-bottom: none; }
+.sims-table tbody tr:hover { background: #f8fafc; }
+
+/* ── Table responsive wrapper ──────────────────────── */
+.table-responsive {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ── Button ─────────────────────────────────────────── */
+.btn-primary {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 36px;
+}
+.btn-primary:hover { background: #1d4ed8; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  background: #ffffff;
+  color: #374151;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-secondary:hover { background: #f9fafb; border-color: #9ca3af; }
+
+.btn-danger {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-danger:hover { background: #fee2e2; }
+
+/* Touch-friendly large buttons for mobile */
+.btn-touch {
+  min-height: 44px;
+  padding: 10px 20px;
+  font-size: 14px;
+}
+
+/* ── Input ───────────────────────────────────────────── */
+.sims-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #ffffff;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  -webkit-appearance: none;
+  min-height: 42px;
+}
+.sims-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+.sims-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #ffffff;
+  outline: none;
+  resize: vertical;
+  min-height: 88px;
+  transition: border-color 0.15s;
+  font-family: inherit;
+  -webkit-appearance: none;
+}
+.sims-textarea:focus { border-color: #2563eb; }
+
+.sims-select {
+  padding: 9px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #ffffff;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+  min-height: 42px;
+}
+.sims-select:focus { border-color: #2563eb; }
+
+/* ── Mobile greeting card ────────────────────────────── */
+.mobile-greeting {
+  display: block;
+}
+@media (min-width: 1024px) {
+  .mobile-greeting { display: none; }
+}
+
+/* ── Mobile-only card list (replaces table) ─────────── */
+.mobile-card-list { display: block; }
+.desktop-table    { display: none; }
+
+@media (min-width: 768px) {
+  .mobile-card-list { display: none; }
+  .desktop-table    { display: block; }
+}
+
+/* ── Scrollbar ───────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: #f1f5f9; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ── Transition helpers ──────────────────────────────── */
+.transition-all-fast { transition: all 0.15s ease; }
+
+/* ── Safe area helpers ───────────────────────────────── */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 16px); }
