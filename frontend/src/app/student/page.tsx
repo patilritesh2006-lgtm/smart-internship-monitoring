@@ -75,24 +75,26 @@ export default function StudentPortal() {
   const [openInternships, setOpenInternships] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
 
-  // Timesheet state
-  const [reportWeek, setReportWeek] = useState(8);
-  const [reportHours, setReportHours] = useState(38.5);
-  const [projectFocus, setProjectFocus] = useState("Core Systems & UI Architecture");
-  const [keyLearnings, setKeyLearnings] = useState(
-    "This week I deepened my understanding of design token serialization and cross-platform component consistency. Collaborating directly with the engineering leads helped me grasp real-world constraints in Tailwind CSS v3 compilation and accessibility contrast boundaries."
-  );
-  const [challenges, setChallenges] = useState(
-    "Waiting on final QA review for the automated screenshot testing pipeline."
-  );
+  // Enhanced Weekly Report & Timesheet State
+  const [reportWeek, setReportWeek] = useState(1);
+  const [reportTitle, setReportTitle] = useState("");
+  const [reportHours, setReportHours] = useState(40.0);
+  const [workCompleted, setWorkCompleted] = useState("");
+  const [challengesFaced, setChallengesFaced] = useState("");
+  const [skillsUsed, setSkillsUsed] = useState<string[]>([]);
+  const [nextWeekPlan, setNextWeekPlan] = useState("");
+  const [evidenceUrl, setEvidenceUrl] = useState("");
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submittingReport, setSubmittingReport] = useState(false);
-  const [reportMsg, setReportMsg] = useState<string | null>(null);
+  const [reportMsg, setReportMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [selectedReportDetail, setSelectedReportDetail] = useState<any | null>(null);
+  const [timesheetSubTab, setTimesheetSubTab] = useState<"form" | "history">("form");
 
   // Evidence files
   const [attachments, setAttachments] = useState([
-    { name: "design_system_tokens_v2_spec.pdf", size: "2.4 MB", date: "Today at 11:20 AM", type: "pdf" },
-    { name: "figma.com/file/novatech-tokens-audit-pr142", size: "External Design Artifact", date: "Synced", type: "link" },
+    { name: "weekly_engineering_log.pdf", size: "2.4 MB", date: "Verified Archive", type: "pdf" },
+    { name: "github.com/org/project/pull/42", size: "Code Repository PR", date: "Linked", type: "link" },
   ]);
 
   // Skill gap state
@@ -125,7 +127,12 @@ export default function StudentPortal() {
         api.listInternships({ status: "AVAILABLE" }),
         api.getMyApplications(),
       ]);
-      if (prof.status === "fulfilled") setProfile(prof.value);
+      if (prof.status === "fulfilled") {
+        setProfile(prof.value);
+        if (prof.value?.skills && prof.value.skills.length > 0) {
+          setSkillsUsed((prev) => (prev.length === 0 ? prof.value.skills.slice(0, 3) : prev));
+        }
+      }
       if (intern.status === "fulfilled") setInternship(intern.value);
       if (tsk.status === "fulfilled") setTasks(tsk.value || []);
       if (rep.status === "fulfilled") {
@@ -134,6 +141,8 @@ export default function StudentPortal() {
         if (loaded.length > 0) {
           const maxW = Math.max(...loaded.map((r: any) => r.week_number || 1));
           setReportWeek(maxW + 1);
+        } else {
+          setReportWeek(1);
         }
       }
       if (att.status === "fulfilled") setAttention(att.value);
@@ -184,24 +193,112 @@ export default function StudentPortal() {
     }
   };
 
+  const validateReportForm = () => {
+    const errors: Record<string, string> = {};
+    if (!reportWeek || reportWeek < 1) {
+      errors.reportWeek = "A valid academic week number is required (minimum 1).";
+    } else if (reports.some((r) => r.week_number === Number(reportWeek))) {
+      errors.reportWeek = `Week ${reportWeek} logbook has already been submitted. Please select an unsubmitted week.`;
+    }
+    if (!workCompleted || workCompleted.trim().length < 10) {
+      errors.workCompleted = "Detailed description of work completed is required (minimum 10 characters).";
+    }
+    if (isNaN(reportHours) || reportHours <= 0 || reportHours > 80) {
+      errors.reportHours = "Please enter valid logged hours between 0.5 and 80.0 hours.";
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const formatAchievementsPayload = () => {
+    const parts: string[] = [];
+    if (reportTitle.trim()) {
+      parts.push(`Title: ${reportTitle.trim()}`);
+    }
+    parts.push(`Work Completed:\n${workCompleted.trim()}`);
+    if (skillsUsed.length > 0) {
+      parts.push(`Skills Applied: ${skillsUsed.join(", ")}`);
+    }
+    if (nextWeekPlan.trim()) {
+      parts.push(`Next Week Plan:\n${nextWeekPlan.trim()}`);
+    }
+    if (evidenceUrl.trim()) {
+      parts.push(`Evidence Reference: ${evidenceUrl.trim()}`);
+    }
+    return parts.join("\n\n");
+  };
+
+  const parseReportAchievements = (text: string) => {
+    if (!text) return { title: null, work: "", skills: [], nextPlan: "", evidence: "" };
+    const titleMatch = text.match(/Title:\s*(.+)/i);
+    const workMatch = text.match(/Work Completed:\s*([\s\S]*?)(?=(Skills Applied:|Next Week Plan:|Evidence Reference:|$))/i);
+    const skillsMatch = text.match(/Skills Applied:\s*(.+)/i);
+    const nextMatch = text.match(/Next Week Plan:\s*([\s\S]*?)(?=(Evidence Reference:|$))/i);
+    const evidenceMatch = text.match(/Evidence Reference:\s*(.+)/i);
+
+    return {
+      title: titleMatch ? titleMatch[1].trim() : null,
+      work: workMatch ? workMatch[1].trim() : text,
+      skills: skillsMatch ? skillsMatch[1].split(",").map((s) => s.trim()) : [],
+      nextPlan: nextMatch ? nextMatch[1].trim() : "",
+      evidence: evidenceMatch ? evidenceMatch[1].trim() : "",
+    };
+  };
+
   const handleSubmitReport = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (submittingReport) return; // Prevent duplicate submission while in flight
+
+    if (!validateReportForm()) {
+      setReportMsg({ type: "error", text: "Please correct the required fields before submitting." });
+      return;
+    }
+
     setSubmittingReport(true);
     setReportMsg(null);
     try {
-      await api.submitReport({
-        week_number: reportWeek,
-        achievements: keyLearnings,
-        challenges: challenges,
-        hours_spent: reportHours,
+      const payload = {
+        week_number: Number(reportWeek),
+        achievements: formatAchievementsPayload(),
+        challenges: challengesFaced.trim() || undefined,
+        hours_spent: Number(reportHours),
+      };
+
+      await api.submitReport(payload);
+
+      setReportMsg({
+        type: "success",
+        text: `Week ${reportWeek} Activity Report submitted successfully! Forwarded to supervisor.`,
       });
-      setReportMsg("Report submitted successfully to supervisor!");
-      const [rep, att] = await Promise.all([api.getMyReports(), api.getMyAttention()]);
-      setReports(rep || []);
+
+      // Refresh data
+      const [rep, att, tsk] = await Promise.all([
+        api.getMyReports(),
+        api.getMyAttention(),
+        api.getMyTasks(),
+      ]);
+      const updatedReports = rep || [];
+      setReports(updatedReports);
       setAttention(att);
-      setTimeout(() => setShowSubmitModal(false), 1200);
-    } catch (e: any) {
-      setReportMsg(`Error: ${e.message}`);
+      setTasks(tsk || []);
+
+      // Reset form
+      setWorkCompleted("");
+      setChallengesFaced("");
+      setNextWeekPlan("");
+      setEvidenceUrl("");
+      setReportTitle("");
+      setFormErrors({});
+
+      const newMax = updatedReports.length > 0 ? Math.max(...updatedReports.map((r: any) => r.week_number || 1)) + 1 : 1;
+      setReportWeek(newMax);
+
+      // Auto dismiss modal after success
+      setTimeout(() => {
+        setShowSubmitModal(false);
+      }, 1500);
+    } catch (err: any) {
+      setReportMsg({ type: "error", text: err.message || "Failed to submit weekly report." });
     } finally {
       setSubmittingReport(false);
     }
@@ -290,6 +387,23 @@ export default function StudentPortal() {
     return Math.max(0, diff);
   };
   const daysRemaining = calculateDaysRemaining();
+
+  const getInternshipDates = () => {
+    const start = internship?.start_date
+      ? new Date(internship.start_date)
+      : internship?.created_at
+      ? new Date(internship.created_at)
+      : new Date("2026-09-01");
+    const end = internship?.end_date
+      ? new Date(internship.end_date)
+      : new Date(start.getTime() + durationWeeks * 7 * 24 * 60 * 60 * 1000);
+
+    return {
+      start: start.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      end: end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    };
+  };
+  const placementDates = getInternshipDates();
 
   const calculateCurrentWeek = () => {
     if (!internship?.start_date) return Math.min(reports.length + 1, durationWeeks);
@@ -1014,395 +1128,614 @@ export default function StudentPortal() {
                 <span className="text-slate-400 text-xs">•</span>
                 <span className="text-xs text-slate-500 font-semibold">{companyName}</span>
                 <span className="text-slate-400 text-xs">•</span>
-                <span className="text-xs text-slate-500 font-semibold">Week 8 of 12</span>
+                <span className="text-xs text-slate-500 font-semibold">{roleTitle}</span>
               </div>
               <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
-                Weekly Activity &amp; Timesheet Report
+                Weekly Activity &amp; Timesheet Workflow
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Document your logged hours, engineering milestones, and key takeaways for workplace mentor and institutional faculty review.
+                Submit validated weekly deliverables, logged hours, and engineering learnings for faculty and mentor review.
               </p>
             </div>
 
-            {/* Date Range Box */}
-            <div className="flex items-center gap-2.5 shrink-0 bg-slate-50 p-2 rounded-xl border border-slate-200/70">
-              <button className="p-1.5 hover:bg-white rounded-lg text-slate-500 transition-colors">
-                <ChevronLeft size={16} />
+            {/* Sub-navigation Pills */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl border border-slate-200/60 self-start sm:self-auto">
+              <button
+                onClick={() => setTimesheetSubTab("form")}
+                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                  timesheetSubTab === "form"
+                    ? "bg-white text-blue-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Submit Report
               </button>
-              <div className="text-center px-1">
-                <div className="text-xs font-bold text-slate-800">Week 8 (Current)</div>
-                <div className="text-[10px] text-slate-400">Oct 14 – Oct 20, 2026</div>
-              </div>
-              <button className="p-1.5 hover:bg-white rounded-lg text-slate-500 transition-colors">
-                <ChevronRight size={16} />
+              <button
+                onClick={() => setTimesheetSubTab("history")}
+                className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all inline-flex items-center gap-1.5 ${
+                  timesheetSubTab === "history"
+                    ? "bg-white text-blue-700 shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <span>Report History</span>
+                <span className="px-1.5 py-0.2 bg-blue-100 text-blue-700 rounded-full text-[10px]">
+                  {reports.length}
+                </span>
               </button>
             </div>
           </div>
 
-          {/* 3 Top StatCards */}
+          {/* Feedback message banner */}
+          {reportMsg && (
+            <div
+              className={`p-4 rounded-xl border flex items-center justify-between gap-3 text-xs font-semibold shadow-xs ${
+                reportMsg.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-rose-50 text-rose-800 border-rose-200"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {reportMsg.type === "success" ? (
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle size={16} className="text-rose-600 shrink-0" />
+                )}
+                <span>{reportMsg.text}</span>
+              </div>
+              <button
+                onClick={() => setReportMsg(null)}
+                className="p-1 hover:opacity-75 rounded-md"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
+          {/* Top 3 Metric StatCards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <StatCard
-              label="Total Hours Logged"
-              value={reportHours}
-              subValue="/ 40.0 hrs target"
+              label="Total Hours Verified"
+              value={`${totalHoursLogged} hrs`}
+              subValue={`/ ${durationWeeks * 40} hrs target`}
               icon={<Clock size={18} />}
               iconBg="blue"
-              progress={(reportHours / 40) * 100}
+              progress={Math.min(100, Math.round((totalHoursLogged / (durationWeeks * 40)) * 100))}
               footer={
                 <div className="flex justify-between">
-                  <span>Weekly Target Fulfillment</span>
-                  <strong className="text-slate-800">{Math.round((reportHours / 40) * 100)}%</strong>
+                  <span>Accreditation Target Pace</span>
+                  <strong className="text-slate-800">
+                    {Math.min(100, Math.round((totalHoursLogged / (durationWeeks * 40)) * 100))}% Fulfilled
+                  </strong>
                 </div>
               }
             />
 
             <StatCard
-              label="Report Status"
-              value="Ready for Submission"
-              badge="Draft"
-              badgeColor="blue"
+              label="Reports Submitted"
+              value={`${reports.length} Logbooks`}
+              subValue={`Week ${currentWeek} Active`}
+              badge={reports.length >= currentWeek ? "On Track" : "Action Needed"}
+              badgeColor={reports.length >= currentWeek ? "emerald" : "amber"}
               icon={<FileText size={18} />}
               iconBg="purple"
               footer={
                 <div className="flex justify-between">
-                  <span>Submission Deadline</span>
-                  <strong className="text-slate-800">Friday, 5:00 PM EST</strong>
+                  <span>Submission Status</span>
+                  <strong className="text-slate-800">
+                    {reports.some((r) => r.week_number === currentWeek) ? "Current Week Submitted" : "Pending Submission"}
+                  </strong>
                 </div>
               }
             />
 
             <StatCard
-              label="Supervisor Review"
-              value="Priya Sharma"
-              subValue="(Workplace)"
-              badge="Pending Submission"
-              badgeColor="amber"
+              label="Faculty Supervision"
+              value={supervisorName}
+              subValue="(Assigned Advisor)"
+              badge="Accredited"
+              badgeColor="blue"
               icon={<UserCheck size={18} />}
               iconBg="emerald"
               footer={
                 <div className="flex justify-between">
-                  <span>Faculty Advisor</span>
-                  <strong className="text-slate-800">Dr. Mehta</strong>
+                  <span>Placement Domain</span>
+                  <strong className="text-slate-800">{roleTitle}</strong>
                 </div>
               }
             />
           </div>
 
-          {/* Main 2-Column Content */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Column (8 cols): Activity Log, Tasks, Learnings, Upload */}
-            <div className="lg:col-span-8 space-y-6">
-              {/* Daily Task Breakdown Card */}
-              <GlassCard className="p-6">
-                <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-4">
-                  <div>
-                    <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                      Week 8 Activity Log &amp; Deliverables
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Fill out project focus, daily breakdown, and upload corroborating assets.
-                    </p>
+          {/* ─────────────────────────── */}
+          {/* SUB-VIEW 1: SUBMISSION FORM */}
+          {/* ─────────────────────────── */}
+          {timesheetSubTab === "form" && (
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Left Column: Form Fields */}
+              <div className="lg:col-span-8 space-y-6">
+                <GlassCard className="p-6">
+                  <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
+                    <div>
+                      <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                        Log Weekly Activity &amp; Deliverables
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Fill out engineering milestones, hours logged, and key learnings for faculty review.
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                      Week {reportWeek} Entry
+                    </span>
                   </div>
-                  <span className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-slate-100 text-slate-600">
-                    Editable Draft
-                  </span>
-                </div>
 
-                {/* Form Inputs Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Total Hours Logged
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        step={0.5}
-                        value={reportHours}
-                        onChange={(e) => setReportHours(Number(e.target.value))}
-                        className="sims-input font-bold text-slate-800"
+                  <form onSubmit={handleSubmitReport} className="space-y-5">
+                    {/* Row 1: Week Number & Hours */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                          Academic Week <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          value={reportWeek}
+                          onChange={(e) => {
+                            setReportWeek(Number(e.target.value));
+                            setFormErrors((prev) => ({ ...prev, reportWeek: "" }));
+                          }}
+                          className={`sims-select w-full ${formErrors.reportWeek ? "border-rose-400 bg-rose-50/20" : ""}`}
+                        >
+                          {Array.from({ length: durationWeeks }, (_, i) => i + 1).map((w) => {
+                            const isSubmitted = reports.some((r) => r.week_number === w);
+                            return (
+                              <option key={w} value={w}>
+                                Week {w} {isSubmitted ? "(Submitted)" : ""}
+                              </option>
+                            );
+                          })}
+                        </select>
+                        {formErrors.reportWeek && (
+                          <p className="text-[11px] text-rose-600 mt-1 font-semibold">{formErrors.reportWeek}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                          Hours Logged <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <input
+                            type="number"
+                            step={0.5}
+                            min={0.5}
+                            max={80}
+                            value={reportHours}
+                            onChange={(e) => {
+                              setReportHours(Number(e.target.value));
+                              setFormErrors((prev) => ({ ...prev, reportHours: "" }));
+                            }}
+                            className={`sims-input font-bold text-slate-800 ${formErrors.reportHours ? "border-rose-400 bg-rose-50/20" : ""}`}
+                          />
+                          <span className="text-xs font-bold text-slate-400">HRS</span>
+                        </div>
+                        {formErrors.reportHours && (
+                          <p className="text-[11px] text-rose-600 mt-1 font-semibold">{formErrors.reportHours}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                          Report Title (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={reportTitle}
+                          onChange={(e) => setReportTitle(e.target.value)}
+                          placeholder="e.g. Model Pipeline & Optimization"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Preset Hours Buttons */}
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-[11px] text-slate-400 font-semibold">Quick Presets:</span>
+                      {[40, 35, 20, 10].map((h) => (
+                        <button
+                          key={h}
+                          type="button"
+                          onClick={() => {
+                            setReportHours(h);
+                            setFormErrors((prev) => ({ ...prev, reportHours: "" }));
+                          }}
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors ${
+                            reportHours === h
+                              ? "bg-blue-600 text-white border-blue-600"
+                              : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                          }`}
+                        >
+                          {h}h
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Work Completed (Required) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                          Work Completed &amp; Engineering Deliverables <span className="text-rose-500">*</span>
+                        </label>
+                        <span className="text-[10px] text-slate-400">{workCompleted.length} characters (min 10)</span>
+                      </div>
+                      <textarea
+                        rows={4}
+                        value={workCompleted}
+                        onChange={(e) => {
+                          setWorkCompleted(e.target.value);
+                          setFormErrors((prev) => ({ ...prev, workCompleted: "" }));
+                        }}
+                        placeholder="Detail specific tasks, tickets, architecture refactoring, and code contributions accomplished this week..."
+                        className={`sims-textarea text-xs leading-relaxed ${
+                          formErrors.workCompleted ? "border-rose-400 bg-rose-50/20" : ""
+                        }`}
                       />
-                      <span className="text-xs font-bold text-slate-400">HRS</span>
+                      {formErrors.workCompleted && (
+                        <p className="text-[11px] text-rose-600 mt-1 font-semibold">{formErrors.workCompleted}</p>
+                      )}
+                    </div>
+
+                    {/* Challenges Faced */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                        Challenges &amp; Impediments Faced
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={challengesFaced}
+                        onChange={(e) => setChallengesFaced(e.target.value)}
+                        placeholder="Document any technical blockers, API contract changes, or dependencies waiting on supervisor input..."
+                        className="sims-textarea text-xs leading-relaxed"
+                      />
+                    </div>
+
+                    {/* Skills Used (Interactive Pill Selector) */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                        Skills &amp; Competencies Applied This Week
+                      </label>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {(profile?.skills || ["Python", "FastAPI", "React", "Docker", "Machine Learning"]).map(
+                          (sk: string) => {
+                            const isSelected = skillsUsed.includes(sk);
+                            return (
+                              <button
+                                key={sk}
+                                type="button"
+                                onClick={() => {
+                                  if (isSelected) {
+                                    setSkillsUsed(skillsUsed.filter((s) => s !== sk));
+                                  } else {
+                                    setSkillsUsed([...skillsUsed, sk]);
+                                  }
+                                }}
+                                className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all ${
+                                  isSelected
+                                    ? "bg-blue-600 text-white border-blue-600 shadow-2xs"
+                                    : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                                }`}
+                              >
+                                {isSelected ? `✓ ${sk}` : `+ ${sk}`}
+                              </button>
+                            );
+                          }
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400">
+                        Selected: {skillsUsed.length > 0 ? skillsUsed.join(", ") : "None selected"}
+                      </p>
+                    </div>
+
+                    {/* Next Week's Plan */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                        Next Week&apos;s Engineering Plan &amp; Focus
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={nextWeekPlan}
+                        onChange={(e) => setNextWeekPlan(e.target.value)}
+                        placeholder="Outline the upcoming milestone deliverables, model evaluations, or sprint commitments planned..."
+                        className="sims-textarea text-xs leading-relaxed"
+                      />
+                    </div>
+
+                    {/* Optional Evidence Link */}
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                        Optional Evidence / Artifact Reference URL
+                      </label>
+                      <input
+                        type="url"
+                        value={evidenceUrl}
+                        onChange={(e) => setEvidenceUrl(e.target.value)}
+                        placeholder="https://github.com/organization/repo/pull/42 or Google Drive / Figma link"
+                        className="sims-input text-xs"
+                      />
+                    </div>
+
+                    {/* Submit Actions */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                      <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                        <Lock size={13} className="text-emerald-600" />
+                        <span>University accreditation audit trail enabled</span>
+                      </div>
+                      <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                        <button
+                          type="button"
+                          onClick={() => setTimesheetSubTab("history")}
+                          className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
+                        >
+                          View History ({reports.length})
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={submittingReport}
+                          className="btn-primary text-xs shadow-xs inline-flex items-center gap-1.5"
+                        >
+                          {submittingReport ? (
+                            <>
+                              <RefreshCw size={13} className="animate-spin" />
+                              <span>Submitting Report...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Submit Week {reportWeek} Report</span>
+                              <Send size={13} />
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </GlassCard>
+              </div>
+
+              {/* Right Column: Mentor Feedback & Submission Guidelines */}
+              <div className="lg:col-span-4 space-y-6">
+                {/* Latest Supervisor Feedback Card */}
+                <GlassCard className="p-6 bg-gradient-to-br from-white via-white to-blue-50/20">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <MessageSquare size={14} className="text-blue-600" />
+                      Supervisor Review Status
+                    </h3>
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                      Active Term
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
+                      {supervisorName.split(" ").map((w: string) => w[0]).slice(0, 2).join("")}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">{supervisorName}</h4>
+                      <p className="text-[11px] text-slate-400">Faculty Supervisor • {studentDept}</p>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                      Project Focus Area
-                    </label>
-                    <select
-                      value={projectFocus}
-                      onChange={(e) => setProjectFocus(e.target.value)}
-                      className="sims-select w-full"
-                    >
-                      <option value="Core Systems & UI Architecture">Core Systems &amp; UI Architecture</option>
-                      <option value="Backend API Optimization">Backend API Optimization</option>
-                      <option value="Data Pipeline Benchmarks">Data Pipeline Benchmarks</option>
-                    </select>
+
+                  <blockquote className="p-3.5 rounded-xl bg-white/90 border border-slate-200/80 text-xs text-slate-700 leading-relaxed italic shadow-xs">
+                    &ldquo;
+                    {latestFeedback?.mentor_feedback ||
+                      "Keep up regular weekly submissions. Ensure all milestone deliverables are linked with git commits or design references."}
+                    &rdquo;
+                  </blockquote>
+
+                  <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-slate-100 text-center">
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Recent Score
+                      </span>
+                      <strong className="text-sm font-black text-slate-900">
+                        {latestFeedback?.mentor_score ? `${latestFeedback.mentor_score} / 100` : "92.0 / 100"}
+                      </strong>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        Evaluation State
+                      </span>
+                      <strong className="text-sm font-black text-emerald-600">
+                        {latestFeedback ? "Reviewed" : "On Track"}
+                      </strong>
+                    </div>
                   </div>
+                </GlassCard>
+
+                {/* Guidelines Card */}
+                <GlassCard className="p-6">
+                  <SectionHeader
+                    title="Accreditation Guidelines"
+                    subtitle="Institutional requirements for weekly logbook sign-off."
+                    className="mb-3"
+                  />
+                  <ul className="space-y-2 text-xs text-slate-600">
+                    <li className="flex items-start gap-2">
+                      <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                      <span>Log realistic work hours between 35.0 and 40.0 hours per regular week.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                      <span>Highlight concrete technical skills applied to maintain high competency scoring.</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
+                      <span>Submit by Friday 5:00 PM to avoid attention score consistency penalties.</span>
+                    </li>
+                  </ul>
+                </GlassCard>
+              </div>
+            </div>
+          )}
+
+          {/* ─────────────────────────── */}
+          {/* SUB-VIEW 2: REPORT HISTORY  */}
+          {/* ─────────────────────────── */}
+          {timesheetSubTab === "history" && (
+            <GlassCard className="p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                    Official Submission History &amp; Faculty Reviews
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Archive of submitted weekly logbooks, verified hours, and faculty mentor feedback.
+                  </p>
                 </div>
+                <button
+                  onClick={() => setTimesheetSubTab("form")}
+                  className="btn-primary text-xs self-start sm:self-auto"
+                >
+                  + Log Week {reportWeek} Activity
+                </button>
+              </div>
 
-                {/* Mon-Fri Task Checklist */}
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-600 mb-1">
-                    <span>Daily Task Breakdown</span>
-                    <span className="text-slate-400 font-medium">5 Days Logged</span>
-                  </div>
-
-                  {WEEKDAYS.map((day, idx) => {
-                    const task = tasks[idx] || {
-                      id: idx + 100,
-                      title: [
-                        "Finalized high-fidelity mockups for navigation sidebar",
-                        "Conducted accessibility audits, 4.5:1 color contrast checks",
-                        "Refactored CSS color tokens to support system dark mode",
-                        "Coordinated with backend team on API schema contract",
-                        "End-to-end integration testing, verified drag-and-drop",
-                      ][idx],
-                      is_completed: idx < 4,
-                    };
-
+              {sortedReports.length === 0 ? (
+                <EmptyState
+                  title="No weekly reports recorded yet"
+                  description="Begin logging your weekly accomplishments and engineering hours to build your official accreditation record."
+                  action={
+                    <button onClick={() => setTimesheetSubTab("form")} className="btn-primary text-xs">
+                      Submit Week 1 Report
+                    </button>
+                  }
+                />
+              ) : (
+                <div className="space-y-4">
+                  {sortedReports.map((report) => {
+                    const parsed = parseReportAchievements(report.achievements);
                     return (
                       <div
-                        key={day.key}
-                        className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 transition-all ${
-                          task.is_completed
-                            ? "bg-slate-50/70 border-slate-200"
-                            : "bg-white border-slate-200 hover:border-blue-300"
-                        }`}
+                        key={report.id}
+                        className="p-5 rounded-2xl border border-slate-200/80 bg-white shadow-2xs hover:border-blue-300 transition-all"
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <button
-                            onClick={() => handleToggleTask(task.id)}
-                            className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
-                            title="Toggle completed state"
-                          >
-                            {task.is_completed ? (
-                              <CheckCircle2 size={20} className="text-blue-600 fill-blue-50" />
-                            ) : (
-                              <Circle size={20} className="text-slate-300" />
-                            )}
-                          </button>
-                          <span className="day-tag">{day.label}</span>
-                          <span
-                            className={`text-xs font-medium truncate ${
-                              task.is_completed ? "line-through text-slate-400" : "text-slate-800"
-                            }`}
-                          >
-                            {task.title}
-                          </span>
+                        {/* Report Header Row */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 mb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 font-extrabold flex items-center justify-center text-xs shrink-0">
+                              W{report.week_number}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="text-sm font-bold text-slate-900">
+                                  {parsed.title || `Week ${report.week_number} Logbook`}
+                                </h4>
+                                <StatusBadge
+                                  status={report.status === "REVIEWED" ? "Reviewed & Approved" : "Pending Review"}
+                                  size="sm"
+                                />
+                              </div>
+                              <p className="text-[11px] text-slate-400 mt-0.5">
+                                Submitted on{" "}
+                                {report.submitted_at ? new Date(report.submitted_at).toLocaleDateString() : "Active Term"}
+                                {" • "}
+                                <strong className="text-slate-700 font-mono">{report.hours_spent} hours logged</strong>
+                              </p>
+                            </div>
+                          </div>
+
+                          {report.mentor_score && (
+                            <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 self-start sm:self-auto">
+                              Score: {report.mentor_score} / 100
+                            </span>
+                          )}
                         </div>
 
-                        <span className="text-xs font-bold text-slate-500 shrink-0">
-                          {day.defaultHours} h
-                        </span>
+                        {/* Report Content Grid */}
+                        <div className="space-y-3 text-xs">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                              Work Completed
+                            </span>
+                            <p className="text-slate-700 leading-relaxed whitespace-pre-line">{parsed.work}</p>
+                          </div>
+
+                          {report.challenges && (
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                                Challenges &amp; Blockers
+                              </span>
+                              <p className="text-slate-600 italic leading-relaxed">{report.challenges}</p>
+                            </div>
+                          )}
+
+                          {parsed.skills.length > 0 && (
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                                Applied Skills
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {parsed.skills.map((sk) => (
+                                  <span
+                                    key={sk}
+                                    className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200"
+                                  >
+                                    {sk}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {parsed.nextPlan && (
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                                Next Week Plan
+                              </span>
+                              <p className="text-slate-600 leading-relaxed whitespace-pre-line">{parsed.nextPlan}</p>
+                            </div>
+                          )}
+
+                          {parsed.evidence && (
+                            <div>
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                                Corroborating Evidence
+                              </span>
+                              <a
+                                href={parsed.evidence}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-blue-600 hover:underline inline-flex items-center gap-1 font-semibold"
+                              >
+                                <span>{parsed.evidence}</span>
+                                <ExternalLink size={12} />
+                              </a>
+                            </div>
+                          )}
+
+                          {/* Supervisor Feedback Box if Available */}
+                          {report.mentor_feedback && (
+                            <div className="mt-3 p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                                  Supervisor Review Feedback ({supervisorName})
+                                </span>
+                                {report.reviewed_at && (
+                                  <span className="text-[10px] text-slate-400">
+                                    Reviewed on {new Date(report.reviewed_at).toLocaleDateString()}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-slate-700 italic leading-relaxed">
+                                &ldquo;{report.mentor_feedback}&rdquo;
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
                 </div>
-
-                <button
-                  onClick={() => setShowSubmitModal(true)}
-                  className="mt-4 w-full py-2.5 border-2 border-dashed border-slate-200 hover:border-blue-400 rounded-xl text-xs font-bold text-blue-600 hover:bg-blue-50/40 transition-all text-center"
-                >
-                  + Add additional daily entry or overtime log
-                </button>
-              </GlassCard>
-
-              {/* Key Learnings & Engineering Takeaways */}
-              <GlassCard className="p-6">
-                <SectionHeader
-                  title="Key Learnings &amp; Engineering Takeaways"
-                  subtitle="Tip: Faculty reviewers evaluate technical depth, problem-solving methodologies, and engineering reflection."
-                  className="mb-3"
-                />
-
-                <textarea
-                  rows={4}
-                  value={keyLearnings}
-                  onChange={(e) => setKeyLearnings(e.target.value)}
-                  className="sims-textarea text-xs leading-relaxed"
-                />
-
-                <div className="mt-4">
-                  <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1">
-                    Challenges &amp; Impediments
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={challenges}
-                    onChange={(e) => setChallenges(e.target.value)}
-                    className="sims-textarea text-xs"
-                  />
-                </div>
-              </GlassCard>
-
-              {/* Evidence & Artifacts Upload */}
-              <GlassCard className="p-6">
-                <SectionHeader
-                  title="Evidence &amp; Artifacts Upload"
-                  subtitle="Accepted formats: PDF summaries, Git diff logs, Figma review links, code screenshots."
-                  badge="PDF, PNG, Figma up to 25MB"
-                  className="mb-4"
-                />
-
-                <div
-                  onClick={handleAddAttachment}
-                  className="p-6 rounded-2xl border-2 border-dashed border-slate-200 hover:border-blue-400 bg-slate-50/40 hover:bg-blue-50/30 text-center cursor-pointer transition-all"
-                >
-                  <UploadCloud size={28} className="mx-auto text-blue-600 mb-1.5" />
-                  <span className="text-xs font-bold text-slate-800">
-                    Drag and drop verification files here, or <span className="text-blue-600 underline">browse</span>
-                  </span>
-                </div>
-
-                {/* Uploaded Files Stack */}
-                <div className="space-y-2.5 mt-4">
-                  {attachments.map((att, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-xl border border-slate-200/80 bg-white/70 flex items-center justify-between gap-3 hover:border-slate-300 transition-all"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                          {att.type === "pdf" ? <FileText size={16} /> : <ExternalLink size={16} />}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-800 truncate">{att.name}</p>
-                          <p className="text-[10px] text-slate-400 font-medium">
-                            {att.size} • {att.date}
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleRemoveAttachment(idx)}
-                        className="p-1 text-slate-400 hover:text-rose-500 rounded-md transition-colors"
-                        title="Delete attachment"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Action Bar */}
-                <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-6 pt-4 border-t border-slate-100">
-                  <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
-                    <Lock size={13} className="text-emerald-600" />
-                    <span>Institutional audit trail enabled</span>
-                  </div>
-                  <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                    <button
-                      onClick={() => handleSubmitReport()}
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all"
-                    >
-                      Save as Draft
-                    </button>
-                    <button
-                      onClick={() => setShowSubmitModal(true)}
-                      className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
-                    >
-                      <span>Submit Week 8 Report</span>
-                      <ArrowRight size={14} />
-                    </button>
-                  </div>
-                </div>
-              </GlassCard>
-            </div>
-
-            {/* Right Column (4 cols): Feedback & Submission History */}
-            <div className="lg:col-span-4 space-y-6">
-              {/* Latest Mentor Feedback Card */}
-              <GlassCard className="p-6 bg-gradient-to-br from-white via-white to-blue-50/20">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <MessageSquare size={14} className="text-blue-600" />
-                    Latest Mentor Feedback
-                  </h3>
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                    Week 7 Review
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-xs">
-                    PS
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900">Priya Sharma</h4>
-                    <p className="text-[11px] text-slate-400">Lead Mentor • Senior UI Architect</p>
-                  </div>
-                </div>
-
-                <blockquote className="p-3.5 rounded-xl bg-white/90 border border-slate-200/80 text-xs text-slate-700 leading-relaxed italic shadow-xs">
-                  &ldquo;
-                  {latestFeedback?.mentor_feedback ||
-                    "Exceptional progress on the component token structure this past week. Aarav demonstrated thorough understanding of WCAG contrast and cleanly separated themes."}
-                  &rdquo;
-                </blockquote>
-
-                <div className="grid grid-cols-2 gap-3 mt-4 pt-3 border-t border-slate-100 text-center">
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      Mentor Score
-                    </span>
-                    <strong className="text-sm font-black text-slate-900">4.9 / 5.0</strong>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      Approval Status
-                    </span>
-                    <strong className="text-sm font-black text-emerald-600">Verified</strong>
-                  </div>
-                </div>
-              </GlassCard>
-
-              {/* Submission History Stack */}
-              <GlassCard className="p-6">
-                <SectionHeader
-                  title="Submission History"
-                  action={
-                    <button className="text-xs text-blue-600 font-semibold hover:underline">
-                      View All (7)
-                    </button>
-                  }
-                  className="mb-4"
-                />
-
-                <div className="space-y-3">
-                  {[
-                    { week: 7, date: "Oct 07 – Oct 13", hrs: "40.0 hrs", status: "Approved" },
-                    { week: 6, date: "Sep 30 – Oct 06", hrs: "39.0 hrs", status: "Approved" },
-                    { week: 5, date: "Sep 23 – Sep 29", hrs: "37.5 hrs", status: "Approved" },
-                  ].map((rep) => (
-                    <div
-                      key={rep.week}
-                      className="p-3 rounded-xl border border-slate-200/80 bg-white/70 flex items-center justify-between gap-3 hover:border-slate-300 transition-all"
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                          <CheckCircle2 size={15} />
-                        </div>
-                        <div>
-                          <div className="text-xs font-bold text-slate-800">Week {rep.week} Report</div>
-                          <div className="text-[10px] text-slate-400">
-                            {rep.date} • {rep.hrs}
-                          </div>
-                        </div>
-                      </div>
-                      <StatusBadge status={rep.status} size="sm" />
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-slate-100 flex items-start gap-2 text-[10px] text-slate-400 leading-normal">
-                  <Lock size={12} className="shrink-0 mt-0.5 text-slate-400" />
-                  <span>
-                    All logged hours and uploaded artifacts are cryptographically hashed, timestamped, and permanently archived per university accreditation guidelines.
-                  </span>
-                </div>
-              </GlassCard>
-            </div>
-          </div>
+              )}
+            </GlassCard>
+          )}
         </div>
       )}
 
@@ -1561,62 +1894,406 @@ export default function StudentPortal() {
       {/* ════════════════════════════════════ */}
       {activeTab === "internships" && (
         <div className="space-y-6">
-          <GlassCard className="p-6">
-            <SectionHeader
-              title="Active Placement & Applications"
-              subtitle="Track accredited corporate placements and employer application lifecycles."
-              badge={`${applications.length || 1} Active Placement`}
-            />
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/85 backdrop-blur-md p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+            <div>
+              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/70">
+                  Accredited Placement
+                </span>
+                <span className="text-slate-400 text-xs">•</span>
+                <span className="text-xs text-slate-500 font-semibold">{companyName}</span>
+                <span className="text-slate-400 text-xs">•</span>
+                <span className="text-xs text-slate-500 font-semibold">{roleTitle}</span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                Internship Placement &amp; Accreditation Record
+              </h1>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Official institutional placement record, milestone deliverables, verified hours, and evidence portfolio.
+              </p>
+            </div>
 
-            {/* Active Placement Card */}
-            <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-50/80 to-indigo-50/50 border border-blue-100 mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-blue-600 text-white font-black text-base flex items-center justify-center shadow-xs">
-                    NS
+            <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto flex-wrap">
+              <button
+                onClick={() => setActiveTab("timesheets")}
+                className="stitch-pill-btn py-2 px-3.5 text-xs inline-flex items-center gap-1.5"
+              >
+                <Clock size={14} />
+                <span>Timesheets Logbook</span>
+              </button>
+              <button
+                onClick={() => setShowSubmitModal(true)}
+                className="btn-primary text-xs inline-flex items-center gap-1.5"
+              >
+                <FileText size={14} />
+                <span>Submit Week {reportWeek} Report</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 1. Organization & Role Hero Card */}
+          <GlassCard className="p-6 sm:p-7">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-100">
+              <div className="flex items-start gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
+                  {companyName.split(" ").map((w: string) => w[0]).slice(0, 2).join("")}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">{companyName}</h2>
+                    <StatusBadge status={internshipStatus === "ACTIVE" ? "Active & Approved" : internshipStatus} />
+                    {internship?.is_remote && (
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                        Remote Placement
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-base font-extrabold text-slate-900">{companyName}</h3>
-                      <StatusBadge status="Active & Approved" />
-                    </div>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Software Engineering Intern • Full-time
-                    </p>
+
+                  <p className="text-sm font-bold text-blue-700 mt-1">
+                    {roleTitle} • {studentDept}
+                  </p>
+
+                  <p className="text-xs text-slate-600 mt-2 max-w-2xl leading-relaxed">
+                    {internship?.description ||
+                      "Core enterprise internship focusing on technical engineering deliverables, real-world system architecture, and supervised applied learning."}
+                  </p>
+
+                  <div className="flex flex-wrap gap-1.5 mt-3">
+                    {(internship?.required_skills || ["Python", "FastAPI", "Machine Learning", "Git"]).map((sk: string) => (
+                      <span
+                        key={sk}
+                        className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200"
+                      >
+                        {sk}
+                      </span>
+                    ))}
                   </div>
                 </div>
-                <button
-                  onClick={() => setActiveTab("timesheets")}
-                  className="btn-primary text-xs self-start sm:self-auto"
-                >
-                  Log Hours &amp; Timesheet
-                </button>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-3 border-t border-blue-100/80">
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Faculty Supervisor</span>
-                  <strong className="text-slate-800">Dr. Mehta</strong>
+              {/* Quick Stipend & Location Box */}
+              <div className="lg:text-right shrink-0 p-4 rounded-xl bg-slate-50 border border-slate-200/70">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                  Compensation &amp; Location
+                </span>
+                <div className="text-lg font-black text-slate-900">
+                  {internship?.stipend ? `$${internship.stipend.toLocaleString()} / month` : "Accredited Term"}
                 </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Workplace Mentor</span>
-                  <strong className="text-slate-800">Priya Sharma</strong>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Department</span>
-                  <strong className="text-slate-800">Core Systems</strong>
-                </div>
-                <div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Total Logged</span>
-                  <strong className="text-blue-700 font-mono">320.0 hrs</strong>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {internship?.location || "Remote / Hybrid Placement"}
                 </div>
               </div>
             </div>
 
-            {/* Available Placements / Listings */}
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-              Partner Employer Listings &amp; Opportunities
-            </h4>
+            {/* 4-Column Key Parameters */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-5">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                  Academic Start Date
+                </span>
+                <strong className="text-xs sm:text-sm font-bold text-slate-800">{placementDates.start}</strong>
+                <span className="text-[10px] text-slate-400 block">Term Commencement</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                  Target Completion Date
+                </span>
+                <strong className="text-xs sm:text-sm font-bold text-slate-800">{placementDates.end}</strong>
+                <span className="text-[10px] text-slate-400 block">{daysRemaining} Days Remaining</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                  Faculty Supervisor
+                </span>
+                <strong className="text-xs sm:text-sm font-bold text-slate-800">{supervisorName}</strong>
+                <span className="text-[10px] text-slate-400 block">{studentDept}</span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                  Placement Term &amp; Hours
+                </span>
+                <strong className="text-xs sm:text-sm font-bold text-blue-700 font-mono">
+                  {durationWeeks} Weeks ({durationWeeks * 40} Target Hrs)
+                </strong>
+                <span className="text-[10px] text-slate-400 block">Week {currentWeek} Active</span>
+              </div>
+            </div>
+          </GlassCard>
+
+          {/* 2. Progress Summary & Accreditation Health */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <GlassCard className="lg:col-span-7 p-6 flex flex-col justify-between">
+              <div>
+                <SectionHeader
+                  title="Deliverable Progress Summary"
+                  subtitle="Deterministic progression tracked through milestone verification and logged hours."
+                  badge={`${taskPct}% Completed`}
+                  className="mb-3"
+                />
+
+                <div className="space-y-3 mb-5">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-700">Milestone Task Completion</span>
+                    <span className="font-bold text-blue-600">{completedTasks} of {totalTasks} Complete</span>
+                  </div>
+                  <ProgressBar value={taskPct} tone="blue" size="md" />
+
+                  <div className="flex items-center justify-between text-xs pt-1">
+                    <span className="font-bold text-slate-700">Verified Hours Logged</span>
+                    <span className="font-mono text-emerald-700 font-bold">
+                      {totalHoursLogged} / {durationWeeks * 40} hrs ({Math.min(100, Math.round((totalHoursLogged / (durationWeeks * 40)) * 100))}%)
+                    </span>
+                  </div>
+                  <ProgressBar
+                    value={Math.min(100, Math.round((totalHoursLogged / (durationWeeks * 40)) * 100))}
+                    tone="emerald"
+                    size="sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-center">
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Completed</span>
+                    <strong className="text-sm font-extrabold text-emerald-700">{completedTasks}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pending</span>
+                    <strong className="text-sm font-extrabold text-amber-700">{pendingTasks}</strong>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Logbooks</span>
+                    <strong className="text-sm font-extrabold text-blue-700">{reports.length}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                <span>Accreditation Evaluation Engine</span>
+                <span className="font-semibold text-emerald-700 flex items-center gap-1">
+                  <ShieldCheck size={14} /> Institutionally Verified
+                </span>
+              </div>
+            </GlassCard>
+
+            <GlassCard className="lg:col-span-5 p-6 flex flex-col justify-between">
+              <div>
+                <SectionHeader
+                  title="Monitoring Attention &amp; Health"
+                  subtitle="Rule-based academic oversight scoring."
+                  badge={attentionStatus === "ON_TRACK" ? "Status: Optimal" : "Status: Attention"}
+                  className="mb-3"
+                />
+
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 mb-4 flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Attention Composite Score
+                    </span>
+                    <div className="text-3xl font-black text-blue-600 mt-0.5">
+                      {attentionScore}<span className="text-base text-slate-400 font-medium"> / 100</span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Pace Assessment
+                    </span>
+                    <strong className="text-xs font-bold text-slate-800 block mt-1">
+                      {attentionStatus === "ON_TRACK" ? "On Schedule" : "Attention Required"}
+                    </strong>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Task Progress Weight (30%)</span>
+                    <strong>{factors.task_completion || taskPct}%</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Consistency Weight (30%)</span>
+                    <strong>{factors.progress_consistency || 85}%</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Logbook Submissions (20%)</span>
+                    <strong>{factors.report_submission || 85}%</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Mentor Rating (20%)</span>
+                    <strong>{factors.mentor_feedback || 80}%</strong>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setActiveTab("feedback")}
+                className="mt-4 text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1 self-start"
+              >
+                <span>View Full Factor Analytics</span>
+                <ChevronRight size={14} />
+              </button>
+            </GlassCard>
+          </div>
+
+          {/* 3. Milestones Checklist */}
+          <GlassCard className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                  Placement Curriculum Milestones
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Accredited technical deliverables tracked directly against university syllabus requirements.
+                </p>
+              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto">
+                {completedTasks} of {totalTasks} Completed ({taskPct}%)
+              </span>
+            </div>
+
+            {tasks.length === 0 ? (
+              <EmptyState
+                title="No milestone deliverables assigned yet"
+                description="Your faculty advisor will assign official curriculum milestones for this placement."
+              />
+            ) : (
+              <div className="space-y-3">
+                {tasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className={`p-4 rounded-xl border transition-all flex items-center justify-between gap-3 ${
+                      task.is_completed
+                        ? "bg-slate-50/60 border-slate-200/60"
+                        : "bg-white border-slate-200 hover:border-blue-300 shadow-2xs"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <button
+                        onClick={() => handleToggleTask(task.id)}
+                        className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
+                        aria-label={`Toggle task ${task.title}`}
+                      >
+                        {task.is_completed ? (
+                          <CheckCircle2 size={22} className="text-blue-600 fill-blue-50" />
+                        ) : (
+                          <Circle size={22} className="text-slate-300 hover:text-blue-400" />
+                        )}
+                      </button>
+                      <div className="min-w-0">
+                        <h4
+                          className={`text-xs sm:text-sm font-bold truncate ${
+                            task.is_completed ? "line-through text-slate-400" : "text-slate-800"
+                          }`}
+                        >
+                          {task.title}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {task.description || "Core engineering deliverable."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {task.is_completed && task.completed_at && (
+                        <span className="text-[10px] text-slate-400 hidden sm:inline">
+                          Verified on {new Date(task.completed_at).toLocaleDateString()}
+                        </span>
+                      )}
+                      <StatusBadge status={task.is_completed ? "Completed" : "In Progress"} size="sm" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </GlassCard>
+
+          {/* 4. Required Accreditation Evidence & Artifacts */}
+          <GlassCard className="p-6">
+            <SectionHeader
+              title="Accreditation Evidence &amp; Artifact Requirements"
+              subtitle="Mandatory university compliance evidence required for formal academic degree credit."
+              badge="Compliance Portfolio"
+              className="mb-4"
+            />
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-100">
+                <span className="text-xs font-bold text-blue-900 block mb-1">1. Weekly Logbooks</span>
+                <p className="text-[11px] text-blue-700 leading-relaxed">
+                  Minimum 1 verified activity timesheet per academic week documenting work completed and hours.
+                </p>
+                <div className="mt-2 text-[11px] font-bold text-blue-800">
+                  Status: {reports.length} of {durationWeeks} Submitted
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-emerald-50/60 border border-emerald-100">
+                <span className="text-xs font-bold text-emerald-900 block mb-1">2. Supervisor Evaluation</span>
+                <p className="text-[11px] text-emerald-700 leading-relaxed">
+                  Formal mentor review rating and signed feedback submitted through the faculty review portal.
+                </p>
+                <div className="mt-2 text-[11px] font-bold text-emerald-800">
+                  Status: {latestFeedback ? "Verified & Scored" : "Pending Supervisor Sign-Off"}
+                </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-purple-50/60 border border-purple-100">
+                <span className="text-xs font-bold text-purple-900 block mb-1">3. Technical Artifacts</span>
+                <p className="text-[11px] text-purple-700 leading-relaxed">
+                  Corroborating code repository pull requests, system diagrams, or PDF sprint reports.
+                </p>
+                <div className="mt-2 text-[11px] font-bold text-purple-800">
+                  Status: {attachments.length} Linked Artifacts
+                </div>
+              </div>
+            </div>
+
+            {/* Evidence Artifacts List */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-700 mb-1">
+                <span>Linked Verification Artifacts</span>
+                <button
+                  onClick={handleAddAttachment}
+                  className="text-blue-600 hover:underline font-semibold inline-flex items-center gap-1"
+                >
+                  <Plus size={13} />
+                  <span>Add Verification Reference</span>
+                </button>
+              </div>
+
+              {attachments.map((att, idx) => (
+                <div
+                  key={idx}
+                  className="p-3 rounded-xl border border-slate-200/80 bg-white/80 flex items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                      {att.type === "pdf" ? <FileText size={16} /> : <ExternalLink size={16} />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-slate-800 truncate">{att.name}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {att.size} • {att.date}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Verified
+                  </span>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+
+          {/* 5. Partner Employer Listings & Opportunities */}
+          <GlassCard className="p-6">
+            <SectionHeader
+              title="Partner Employer Opportunities &amp; Fellowships"
+              subtitle="Browse accredited industry openings for upcoming semester terms."
+              className="mb-4"
+            />
             <div className="space-y-3">
               {(openInternships.length > 0 ? openInternships : [
                 {
@@ -1809,12 +2486,13 @@ export default function StudentPortal() {
       <Modal
         isOpen={showSubmitModal}
         onClose={() => setShowSubmitModal(false)}
-        title={`Submit Week ${reportWeek} Timesheet & Report`}
+        title={`Submit Week ${reportWeek} Activity Report & Timesheet`}
         subtitle="This report will be forwarded to your workplace mentor and faculty supervisor for formal review."
         footer={
           <>
             <button
               type="button"
+              disabled={submittingReport}
               onClick={() => setShowSubmitModal(false)}
               className="btn-secondary text-xs"
             >
@@ -1824,38 +2502,199 @@ export default function StudentPortal() {
               type="button"
               disabled={submittingReport}
               onClick={() => handleSubmitReport()}
-              className="btn-primary text-xs"
+              className="btn-primary text-xs inline-flex items-center gap-1.5"
             >
-              {submittingReport ? "Transmitting..." : "Confirm & Submit Logbook"}
+              {submittingReport ? (
+                <>
+                  <RefreshCw size={13} className="animate-spin" />
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <>
+                  <span>Confirm &amp; Submit Logbook</span>
+                  <Send size={13} />
+                </>
+              )}
             </button>
           </>
         }
       >
-        <div className="space-y-3.5">
+        <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+          {reportMsg && (
+            <div
+              className={`p-3 rounded-xl text-xs font-semibold border ${
+                reportMsg.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-rose-50 text-rose-800 border-rose-200"
+              }`}
+            >
+              {reportMsg.text}
+            </div>
+          )}
+
+          {/* Week & Hours Row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                Academic Week <span className="text-rose-500">*</span>
+              </label>
+              <select
+                value={reportWeek}
+                onChange={(e) => {
+                  setReportWeek(Number(e.target.value));
+                  setFormErrors((prev) => ({ ...prev, reportWeek: "" }));
+                }}
+                className={`sims-select w-full text-xs ${formErrors.reportWeek ? "border-rose-400 bg-rose-50/20" : ""}`}
+              >
+                {Array.from({ length: durationWeeks }, (_, i) => i + 1).map((w) => {
+                  const isSubmitted = reports.some((r) => r.week_number === w);
+                  return (
+                    <option key={w} value={w}>
+                      Week {w} {isSubmitted ? "(Already Submitted)" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+              {formErrors.reportWeek && (
+                <p className="text-[11px] text-rose-600 mt-0.5 font-semibold">{formErrors.reportWeek}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                Hours Logged <span className="text-rose-500">*</span>
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  step={0.5}
+                  min={0.5}
+                  max={80}
+                  value={reportHours}
+                  onChange={(e) => {
+                    setReportHours(Number(e.target.value));
+                    setFormErrors((prev) => ({ ...prev, reportHours: "" }));
+                  }}
+                  className={`sims-input text-xs font-bold ${formErrors.reportHours ? "border-rose-400 bg-rose-50/20" : ""}`}
+                />
+                <span className="text-xs font-bold text-slate-400">HRS</span>
+              </div>
+              {formErrors.reportHours && (
+                <p className="text-[11px] text-rose-600 mt-0.5 font-semibold">{formErrors.reportHours}</p>
+              )}
+            </div>
+          </div>
+
+          {/* Title */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Hours Logged</label>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Report Title (Optional)
+            </label>
             <input
-              type="number"
-              step={0.5}
-              value={reportHours}
-              onChange={(e) => setReportHours(Number(e.target.value))}
-              className="sims-input text-xs font-bold"
+              type="text"
+              value={reportTitle}
+              onChange={(e) => setReportTitle(e.target.value)}
+              placeholder="e.g. Model Optimization & Training Pipeline"
+              className="sims-input text-xs"
             />
           </div>
+
+          {/* Work Completed */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Weekly Engineering Accomplishments</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                Work Completed &amp; Engineering Deliverables <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[10px] text-slate-400">{workCompleted.length} characters (min 10)</span>
+            </div>
             <textarea
               rows={3}
-              value={keyLearnings}
-              onChange={(e) => setKeyLearnings(e.target.value)}
+              value={workCompleted}
+              onChange={(e) => {
+                setWorkCompleted(e.target.value);
+                setFormErrors((prev) => ({ ...prev, workCompleted: "" }));
+              }}
+              placeholder="Detail specific tasks, code contributions, and architecture changes completed this week..."
+              className={`sims-textarea text-xs ${formErrors.workCompleted ? "border-rose-400 bg-rose-50/20" : ""}`}
+            />
+            {formErrors.workCompleted && (
+              <p className="text-[11px] text-rose-600 mt-0.5 font-semibold">{formErrors.workCompleted}</p>
+            )}
+          </div>
+
+          {/* Challenges Faced */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Challenges &amp; Impediments
+            </label>
+            <textarea
+              rows={2}
+              value={challengesFaced}
+              onChange={(e) => setChallengesFaced(e.target.value)}
+              placeholder="Document any blockers, unexpected errors, or pending dependencies..."
               className="sims-textarea text-xs"
             />
           </div>
-          {reportMsg && (
-            <div className="p-3 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              {reportMsg}
+
+          {/* Skills Applied Pills */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+              Skills Applied
+            </label>
+            <div className="flex flex-wrap gap-1.5">
+              {(profile?.skills || ["Python", "FastAPI", "React", "Docker"]).map((sk: string) => {
+                const isSelected = skillsUsed.includes(sk);
+                return (
+                  <button
+                    key={sk}
+                    type="button"
+                    onClick={() => {
+                      if (isSelected) {
+                        setSkillsUsed(skillsUsed.filter((s) => s !== sk));
+                      } else {
+                        setSkillsUsed([...skillsUsed, sk]);
+                      }
+                    }}
+                    className={`px-2 py-0.5 text-xs font-semibold rounded-full border transition-all ${
+                      isSelected
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    {isSelected ? `✓ ${sk}` : `+ ${sk}`}
+                  </button>
+                );
+              })}
             </div>
-          )}
+          </div>
+
+          {/* Next Week Plan */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Next Week&apos;s Engineering Plan
+            </label>
+            <textarea
+              rows={2}
+              value={nextWeekPlan}
+              onChange={(e) => setNextWeekPlan(e.target.value)}
+              placeholder="Key objectives planned for the upcoming week..."
+              className="sims-textarea text-xs"
+            />
+          </div>
+
+          {/* Evidence URL */}
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+              Optional Evidence / Artifact URL
+            </label>
+            <input
+              type="url"
+              value={evidenceUrl}
+              onChange={(e) => setEvidenceUrl(e.target.value)}
+              placeholder="https://github.com/org/repo/pull/12 or drive link"
+              className="sims-input text-xs"
+            />
+          </div>
         </div>
       </Modal>
     </DashboardLayout>
