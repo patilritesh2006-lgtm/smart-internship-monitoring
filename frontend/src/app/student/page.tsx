@@ -12,6 +12,8 @@ import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Modal } from "@/components/ui/Modal";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ProgressAttentionCard } from "@/components/ProgressAttentionCard";
+import { IntelligenceExplainerModal } from "@/components/IntelligenceExplainerModal";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
@@ -686,69 +688,20 @@ export default function StudentPortal() {
               </div>
             </GlassCard>
 
-            {/* Attention & Status Card */}
-            <GlassCard className="lg:col-span-5 p-6 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3 className="text-sm font-extrabold text-slate-900 tracking-tight">
-                      Progress Status
-                    </h3>
-                    <p className="text-xs text-slate-500">Deterministic accreditation health</p>
-                  </div>
-                  <StatusBadge
-                    status={
-                      attentionStatus === "ON_TRACK"
-                        ? "Optimal"
-                        : attentionStatus === "NEEDS_ATTENTION"
-                        ? "Action Required"
-                        : "Critical"
-                    }
-                  />
-                </div>
-
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 mb-4 flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      Progress Score
-                    </span>
-                    <div className="text-3xl font-black text-blue-600 mt-0.5">
-                      {attentionScore}<span className="text-base text-slate-400 font-medium"> / 100</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      Evaluation
-                    </span>
-                    <strong className="text-xs text-slate-800 font-bold block mt-1">
-                      {attentionStatus === "ON_TRACK" ? "On Schedule" : "Attention Advised"}
-                    </strong>
-                  </div>
-                </div>
-
-                <div className="space-y-2 text-xs">
-                  <div className="flex justify-between">
-                    <span className="text-slate-500">Milestone Task Completion</span>
-                    <strong className="text-slate-800">{taskPct}%</strong>
-                  </div>
-                  <ProgressBar value={taskPct} tone="blue" size="sm" />
-
-                  <div className="flex justify-between pt-1">
-                    <span className="text-slate-500">Logbook Reporting Rate</span>
-                    <strong className="text-slate-800">{factors.report_submission || 85}%</strong>
-                  </div>
-                  <ProgressBar value={factors.report_submission || 85} tone="emerald" size="sm" />
-                </div>
-              </div>
-
-              <button
-                onClick={() => setActiveTab("feedback")}
-                className="mt-4 text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1 self-start"
-              >
-                <span>View 4-Factor Breakdown</span>
-                <ChevronRight size={14} />
-              </button>
-            </GlassCard>
+            {/* Progress Analysis & Monitoring Status Card */}
+            <ProgressAttentionCard
+              className="lg:col-span-5"
+              score={attentionScore}
+              status={attentionStatus}
+              factors={factors}
+              reasons={reasons}
+              recommendations={recommendations}
+              title="Progress Analysis"
+              subtitle="Monitoring Status & Academic Factors"
+              showBreakdown={true}
+              onActionClick={() => setActiveTab("feedback")}
+              actionLabel="Detailed 4-Factor Breakdown"
+            />
           </div>
 
           {/* ─────────────────────────────────── */}
@@ -1789,98 +1742,159 @@ export default function StudentPortal() {
       )}
 
       {/* ════════════════════════════════════ */}
-      {/* FEEDBACK / SKILL GAP TAB            */}
+      {/* PROGRESS ANALYSIS & SKILL GAP TAB    */}
       {/* ════════════════════════════════════ */}
       {activeTab === "feedback" && (
         <div className="space-y-6">
-          {attention && (
-            <GlassCard className="p-6">
-              <SectionHeader
-                title="4-Factor Progress Intelligence"
-                subtitle="Deterministic academic attention score calculation."
-              />
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
-                <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 text-center">
-                  <div className="text-4xl font-black text-blue-600">
-                    {Math.round(attention.score || 82)}
-                  </div>
-                  <div className="text-xs font-bold text-slate-500 mt-1">Composite Score</div>
-                </div>
-                <div className="sm:col-span-2 space-y-2">
-                  <div className="text-xs font-bold text-slate-600 mb-2">Score Breakdown</div>
-                  {attention.breakdown &&
-                    Object.entries(attention.breakdown).map(([k, v]: [string, any]) => (
-                      <div key={k}>
-                        <div className="flex justify-between text-xs mb-1">
-                          <span className="capitalize text-slate-600">{k.replace(/_/g, " ")}</span>
-                          <strong className="text-slate-800">
-                            {typeof v === "number" ? v.toFixed(1) : v}
-                          </strong>
-                        </div>
-                        <ProgressBar
-                          value={typeof v === "number" ? Math.min(100, Math.abs(v)) : 80}
-                          tone="blue"
-                          size="sm"
-                        />
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </GlassCard>
-          )}
+          {/* Section 1: Progress Analysis */}
+          <ProgressAttentionCard
+            score={attentionScore}
+            status={attentionStatus}
+            factors={factors}
+            reasons={reasons}
+            recommendations={recommendations}
+            title="Progress Analysis"
+            subtitle="Deterministic 4-Factor Monitoring & Attention Evaluation"
+            showBreakdown={true}
+          />
 
-          {/* Skill Gap */}
+          {/* Section 2: Skill Gap Analysis */}
           <GlassCard className="p-6">
             <SectionHeader
-              title="Curriculum Skill Gap Simulator"
-              subtitle="Evaluate your competencies against active enterprise job postings."
+              title="Skill Gap Analysis"
+              subtitle="Deterministic mathematical comparison between your acquired technical competencies and corporate internship prerequisites."
+              badge="Curriculum Alignment"
             />
-            <div className="flex flex-wrap gap-2 mb-4">
-              {openInternships.map((i) => (
-                <button
-                  key={i.id}
-                  onClick={() => handleAnalyzeGap(i)}
-                  className={`stitch-pill-btn ${
-                    selectedGapInternship?.id === i.id ? "bg-blue-600 text-white" : ""
-                  }`}
-                >
-                  {i.title} @ {i.company?.name || "NovaTech"}
-                </button>
-              ))}
+
+            <div className="mb-4">
+              <span className="text-xs font-bold text-slate-700 block mb-2">
+                Select Placement Opportunity to Analyze:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {internship && (
+                  <button
+                    onClick={() => handleAnalyzeGap(internship)}
+                    className={`stitch-pill-btn py-1.5 px-3 text-xs font-bold ${
+                      selectedGapInternship?.id === internship.id
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-slate-700"
+                    }`}
+                  >
+                    Current: {roleTitle} @ {companyName}
+                  </button>
+                )}
+                {openInternships.map((i) => (
+                  <button
+                    key={i.id}
+                    onClick={() => handleAnalyzeGap(i)}
+                    className={`stitch-pill-btn py-1.5 px-3 text-xs font-bold ${
+                      selectedGapInternship?.id === i.id
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-slate-700"
+                    }`}
+                  >
+                    {i.title} @ {i.company?.name || "Corporate Partner"}
+                  </button>
+                ))}
+              </div>
             </div>
 
+            {analyzingGap && (
+              <div className="p-6 text-center text-xs text-slate-500 font-semibold animate-pulse">
+                Evaluating deterministic skill match...
+              </div>
+            )}
+
             {gapResult && (
-              <div className="p-5 rounded-2xl bg-blue-50/70 border border-blue-100">
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <div className="text-3xl font-black text-blue-700">{gapResult.match_percentage}%</div>
-                    <div className="text-xs font-semibold text-blue-600">Curriculum Skill Match</div>
+              <div className="p-5 sm:p-6 rounded-2xl bg-blue-50/70 border border-blue-200/80 mt-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-blue-200/60">
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white font-black text-xl flex items-center justify-center shrink-0 shadow-xs">
+                      {gapResult.match_percentage}%
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 block">
+                        Skill Gap Analysis Result
+                      </span>
+                      <h4 className="text-base font-extrabold text-slate-900 tracking-tight">
+                        {selectedGapInternship?.title}
+                      </h4>
+                      <p className="text-xs text-slate-500 font-medium">
+                        {selectedGapInternship?.company?.name || companyName}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="text-sm font-bold text-slate-800">{selectedGapInternship?.title}</div>
-                    <div className="text-xs text-slate-500">{selectedGapInternship?.company?.name}</div>
+
+                  <div className="text-left sm:text-right">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      Curriculum Fit
+                    </span>
+                    <strong className="text-xs font-extrabold text-blue-900 block mt-0.5">
+                      {gapResult.match_percentage >= 75
+                        ? "High Competency Match"
+                        : gapResult.match_percentage >= 50
+                        ? "Moderate Alignment"
+                        : "Growth Opportunity"}
+                    </strong>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-4 pt-2">
-                  <div>
-                    <span className="text-xs font-bold text-emerald-700 block mb-1">✓ Matched Skills</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {gapResult.matched_skills?.map((s: string) => (
-                        <span key={s} className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-100 text-emerald-800">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
+                  {/* Matched Skills */}
+                  <div className="p-4 rounded-xl bg-white border border-emerald-200 shadow-2xs">
+                    <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                      <CheckCircle2 size={14} className="text-emerald-600" />
+                      <span>Verified Matched Skills ({gapResult.matched_skills?.length || 0})</span>
+                    </span>
+                    {gapResult.matched_skills && gapResult.matched_skills.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {gapResult.matched_skills.map((s: string) => (
+                          <span
+                            key={s}
+                            className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs"
+                          >
+                            ✓ {s}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 italic">No exact matched skills.</p>
+                    )}
                   </div>
+
+                  {/* Missing Skills */}
+                  <div className="p-4 rounded-xl bg-white border border-amber-200 shadow-2xs">
+                    <span className="text-xs font-bold text-amber-800 uppercase tracking-wider block mb-2 flex items-center gap-1.5">
+                      <AlertTriangle size={14} className="text-amber-600" />
+                      <span>Target Growth Skills ({gapResult.missing_skills?.length || 0})</span>
+                    </span>
+                    {gapResult.missing_skills && gapResult.missing_skills.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {gapResult.missing_skills.map((s: string) => (
+                          <span
+                            key={s}
+                            className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-50 text-amber-900 border border-amber-200 shadow-2xs"
+                          >
+                            + {s}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-emerald-700 font-semibold">
+                        All required internship competencies are fully met!
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Recommendation */}
+                <div className="p-3.5 rounded-xl bg-white border border-blue-200/80 flex items-start gap-2.5 text-xs text-slate-800 shadow-2xs">
+                  <span className="text-blue-600 font-bold text-sm shrink-0">💡</span>
                   <div>
-                    <span className="text-xs font-bold text-amber-700 block mb-1">⚠ Missing Skills</span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {gapResult.missing_skills?.map((s: string) => (
-                        <span key={s} className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
-                          {s}
-                        </span>
-                      ))}
-                    </div>
+                    <strong className="text-blue-950 font-bold block mb-0.5">
+                      Recommended Review Action:
+                    </strong>
+                    <span>{gapResult.recommendation}</span>
                   </div>
                 </div>
               </div>

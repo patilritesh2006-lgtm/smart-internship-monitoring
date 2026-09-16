@@ -11,6 +11,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Modal } from "@/components/ui/Modal";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { IntelligenceExplainerModal } from "@/components/IntelligenceExplainerModal";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
@@ -35,6 +36,7 @@ import {
   Filter,
   Globe,
   GraduationCap,
+  Info,
   Layers,
   Mail,
   Plus,
@@ -60,6 +62,7 @@ export default function AdminPortal() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showExplainer, setShowExplainer] = useState(false);
 
   // Live Backend Data
   const [analytics, setAnalytics] = useState<any>(null);
@@ -495,18 +498,27 @@ export default function AdminPortal() {
         {/* Attention Distribution Breakdown (5 cols) */}
         <GlassCard className="lg:col-span-5 p-6 border-slate-200/80 flex flex-col justify-between">
           <div>
-            <SectionHeader
-              title="Cohort Attention Distribution"
-              subtitle="Deterministic 4-Factor Intelligence Engine categorizing intern risk."
-              badge="Deterministic Engine"
-            />
+            <div className="flex items-center justify-between mb-4">
+              <SectionHeader
+                title="Cohort Progress Analysis &amp; Status"
+                subtitle="Deterministic 4-Factor scoring across active students."
+              />
+              <button
+                onClick={() => setShowExplainer(true)}
+                className="stitch-pill-btn py-1 px-2.5 text-[11px] font-bold text-slate-600 hover:text-blue-700 bg-white"
+                title="View deterministic scoring formula &amp; logic"
+              >
+                <Info size={12} className="text-blue-600" />
+                <span>How it works</span>
+              </button>
+            </div>
 
             {/* Visual Multi-Segment Bar Chart */}
-            <div className="mt-4">
+            <div className="mt-2">
               <div className="flex items-center justify-between mb-1.5">
-                <span className="text-xs font-bold text-slate-700">Health Breakdown</span>
+                <span className="text-xs font-bold text-slate-700">Monitoring Status Breakdown</span>
                 <span className="text-xs font-extrabold text-blue-600">
-                  Avg Health: {analytics?.average_attention_score || 0} / 100
+                  Avg Score: {analytics?.average_attention_score || 0}%
                 </span>
               </div>
 
@@ -535,27 +547,28 @@ export default function AdminPortal() {
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block mb-1" />
                 <span className="text-[10px] font-bold text-emerald-800 uppercase block">On Track</span>
                 <strong className="text-lg font-black text-emerald-950 block">{onTrackCount}</strong>
-                <span className="text-[10px] text-emerald-700 font-semibold">{onTrackPct}%</span>
+                <span className="text-[10px] text-emerald-700 font-semibold">{onTrackPct}% (&ge;75%)</span>
               </div>
 
               <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/70 text-center">
                 <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block mb-1" />
                 <span className="text-[10px] font-bold text-amber-800 uppercase block">Monitor</span>
                 <strong className="text-lg font-black text-amber-950 block">{monitorCount}</strong>
-                <span className="text-[10px] text-amber-700 font-semibold">{monitorPct}%</span>
+                <span className="text-[10px] text-amber-700 font-semibold">{monitorPct}% (50–74%)</span>
               </div>
 
               <div className="p-3 rounded-xl bg-rose-50/60 border border-rose-200/70 text-center">
                 <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block mb-1" />
-                <span className="text-[10px] font-bold text-rose-800 uppercase block">Attention</span>
+                <span className="text-[10px] font-bold text-rose-800 uppercase block">Needs Attention</span>
                 <strong className="text-lg font-black text-rose-950 block">{attentionCount}</strong>
-                <span className="text-[10px] text-rose-700 font-semibold">{attentionPct}%</span>
+                <span className="text-[10px] text-rose-700 font-semibold">{attentionPct}% (&lt;50%)</span>
               </div>
             </div>
           </div>
 
           <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
-            <span>Score threshold: &ge;75 On Track, 50–74 Monitor, &lt;50 Attention</span>
+            <span>Score threshold: &ge;75 On Track, 50–74 Monitor, &lt;50 Needs Attention</span>
+            <span className="text-blue-600 font-bold">100% Deterministic</span>
           </div>
         </GlassCard>
       </div>
@@ -1006,6 +1019,11 @@ export default function AdminPortal() {
           </form>
         </Modal>
       )}
+
+      <IntelligenceExplainerModal
+        isOpen={showExplainer}
+        onClose={() => setShowExplainer(false)}
+      />
     </DashboardLayout>
   );
 }

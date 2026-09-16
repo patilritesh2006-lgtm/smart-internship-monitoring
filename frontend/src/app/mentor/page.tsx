@@ -11,6 +11,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Modal } from "@/components/ui/Modal";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { IntelligenceExplainerModal } from "@/components/IntelligenceExplainerModal";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
@@ -29,13 +30,17 @@ import {
   FileText,
   Filter,
   GraduationCap,
+  Info,
   MessageSquare,
   Plus,
   RefreshCw,
   Search,
   Send,
+  ShieldAlert,
+  ShieldCheck,
   Sparkles,
   Star,
+  Target,
   TrendingUp,
   UserCheck,
   Users,
@@ -48,6 +53,7 @@ export default function MentorPortal() {
 
   const [activeTab, setActiveTab] = useState("overview");
   const [loading, setLoading] = useState(true);
+  const [showExplainer, setShowExplainer] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -369,25 +375,46 @@ export default function MentorPortal() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-rose-200/80 text-rose-800">
-                      Priority Attention Queue • Action Required
+                      Priority Attention Queue
+                    </span>
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-300/80">
+                      Monitoring Status: {topPriorityStudent.attention_status === "NEEDS_ATTENTION" ? "Needs Attention" : "Monitor"}
                     </span>
                     <span className="text-xs font-black text-rose-700">
-                      Score: {topPriorityStudent.attention_score}%
+                      Score: {Math.round(topPriorityStudent.attention_score)}%
                     </span>
                   </div>
                   <h3 className="text-sm font-extrabold text-slate-900">
                     {topPriorityStudent.student_name} — {topPriorityStudent.internship_title} at {topPriorityStudent.company_name}
                   </h3>
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {topPriorityStudent.reasons?.map((reason: string, idx: number) => (
-                      <span
-                        key={idx}
-                        className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white text-rose-800 border border-rose-200 shadow-2xs"
-                      >
-                        ⚠️ {reason}
-                      </span>
-                    ))}
+
+                  {/* Attention Indicators */}
+                  <div className="mt-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block mb-1">
+                      Contributing Attention Indicators:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {topPriorityStudent.reasons?.map((reason: string, idx: number) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white text-rose-800 border border-rose-200 shadow-2xs"
+                        >
+                          ⚠️ {reason}
+                        </span>
+                      ))}
+                    </div>
                   </div>
+
+                  {/* Recommended Review Action */}
+                  <div className="mt-2 p-2 rounded-lg bg-white/90 border border-rose-200/80 text-[11px] text-slate-800 flex items-center gap-1.5">
+                    <span className="text-rose-600 font-bold">💡 Recommended Action:</span>
+                    <span className="font-semibold">
+                      {topPriorityStudent.recommendations && topPriorityStudent.recommendations.length > 0
+                        ? topPriorityStudent.recommendations[0]
+                        : "Faculty review recommended."}
+                    </span>
+                  </div>
+
                   <div className="flex items-center gap-3 mt-2 text-[11px] text-slate-500">
                     <span>
                       Milestones: <strong>{topPriorityStudent.tasks_completed}/{topPriorityStudent.tasks_total}</strong> completed
@@ -412,7 +439,7 @@ export default function MentorPortal() {
                   className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
                 >
                   <Eye size={13} />
-                  <span>Inspect &amp; Intervene</span>
+                  <span>Inspect Student Detail</span>
                 </Link>
               </div>
             </div>
@@ -497,57 +524,67 @@ export default function MentorPortal() {
             {/* Monitoring Insights (Deterministic Intelligence) (4 cols) */}
             <GlassCard className="lg:col-span-4 p-6 flex flex-col justify-between">
               <div>
-                <SectionHeader
-                  title="Deterministic Monitoring Factors"
-                  subtitle="Intelligence Engine Evaluation Formula"
-                  className="mb-4"
-                />
+                <div className="flex items-center justify-between mb-4">
+                  <SectionHeader
+                    title="Progress Analysis Factors"
+                    subtitle="Deterministic 4-Factor Engine Formula"
+                  />
+                  <button
+                    onClick={() => setShowExplainer(true)}
+                    className="stitch-pill-btn py-1 px-2.5 text-[11px] font-bold text-slate-600 hover:text-blue-700 bg-white"
+                    title="View deterministic scoring formula &amp; logic"
+                  >
+                    <Info size={12} className="text-blue-600" />
+                    <span>How it works</span>
+                  </button>
+                </div>
 
                 <div className="space-y-3.5 text-xs text-slate-600">
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
                     <div className="flex items-center justify-between font-bold text-slate-800 mb-1">
-                      <span>Task Completion (30%)</span>
-                      <span className="text-blue-600 font-extrabold">Milestones</span>
+                      <span>Progress Consistency (30%)</span>
+                      <span className="text-blue-600 font-extrabold">30% Weight</span>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-normal">
-                      Verified deliverables completed in the student roadmap.
+                      Ongoing cadence of weekly activity logging and milestone delivery.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
+                    <div className="flex items-center justify-between font-bold text-slate-800 mb-1">
+                      <span>Task Completion (30%)</span>
+                      <span className="text-emerald-600 font-extrabold">30% Weight</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-normal">
+                      Ratio of completed milestone tasks against total assigned deliverables.
                     </p>
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
                     <div className="flex items-center justify-between font-bold text-slate-800 mb-1">
                       <span>Weekly Logbooks (20%)</span>
-                      <span className="text-emerald-600 font-extrabold">Submissions</span>
+                      <span className="text-purple-600 font-extrabold">20% Weight</span>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-normal">
-                      Regularity and completeness of submitted weekly reports.
+                      Count of submitted weekly reports relative to active academic weeks.
                     </p>
                   </div>
 
                   <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
                     <div className="flex items-center justify-between font-bold text-slate-800 mb-1">
-                      <span>Faculty Review (20%)</span>
-                      <span className="text-purple-600 font-extrabold">Evaluation</span>
+                      <span>Mentor Feedback (20%)</span>
+                      <span className="text-amber-600 font-extrabold">20% Weight</span>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-normal">
-                      Average rubric score given by academic supervisors.
-                    </p>
-                  </div>
-
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-                    <div className="flex items-center justify-between font-bold text-slate-800 mb-1">
-                      <span>Progress Consistency (30%)</span>
-                      <span className="text-amber-600 font-extrabold">Execution</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500 leading-normal">
-                      Harmonized balance of execution pace and continuous reporting.
+                      Average rubric score awarded by academic faculty supervisors.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400">
-                <span>Deterministic rules • Explainable academic oversight</span>
+              <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 flex items-center justify-between">
+                <span>Deterministic rules • Evidence-based</span>
+                <span className="text-blue-600 font-bold">100% Explainable</span>
               </div>
             </GlassCard>
           </div>
@@ -1100,6 +1137,11 @@ export default function MentorPortal() {
           </div>
         </Modal>
       )}
+
+      <IntelligenceExplainerModal
+        isOpen={showExplainer}
+        onClose={() => setShowExplainer(false)}
+      />
     </DashboardLayout>
   );
 }

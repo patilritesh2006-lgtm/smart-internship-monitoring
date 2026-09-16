@@ -11,6 +11,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Modal } from "@/components/ui/Modal";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { IntelligenceExplainerModal } from "@/components/IntelligenceExplainerModal";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
@@ -30,6 +31,7 @@ import {
   FileCheck,
   FileText,
   GraduationCap,
+  Info,
   Mail,
   MapPin,
   MessageSquare,
@@ -55,6 +57,7 @@ export default function FacultyStudentMonitoringPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showExplainer, setShowExplainer] = useState(false);
 
   // Student Detail State from Backend
   const [studentDetail, setStudentDetail] = useState<any | null>(null);
@@ -514,15 +517,17 @@ export default function FacultyStudentMonitoringPage() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════ */}
-        {/* SECTION 3: EXPLAINABLE ATTENTION PANEL                     */}
+        {/* SECTION 3: PROGRESS ANALYSIS & MONITORING STATUS           */}
         {/* ══════════════════════════════════════════════════════════ */}
         <GlassCard className="p-5 sm:p-6 border-slate-200/80">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
             <div>
               <div className="flex items-center gap-2 mb-1">
-                <Sparkles size={16} className="text-blue-600" />
+                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/70">
+                  Deterministic Engine
+                </span>
                 <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                  Deterministic Progress Attention Engine
+                  Progress Analysis
                 </h3>
               </div>
               <p className="text-xs text-slate-500">
@@ -530,12 +535,20 @@ export default function FacultyStudentMonitoringPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+              <button
+                onClick={() => setShowExplainer(true)}
+                className="stitch-pill-btn py-1 px-2.5 text-[11px] font-bold text-slate-600 hover:text-blue-700 bg-white"
+                title="View deterministic scoring formula &amp; logic"
+              >
+                <Info size={12} className="text-blue-600" />
+                <span>How it works</span>
+              </button>
               <StatusBadge status={studentDetail.attention_status} size="lg" />
-              <div className="text-right">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Health Index</span>
+              <div className="text-right pl-2 border-l border-slate-200">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Score</span>
                 <span className="text-lg font-black text-slate-900">
-                  {studentDetail.attention_score} <span className="text-xs text-slate-400 font-semibold">/ 100</span>
+                  {studentDetail.attention_score}%
                 </span>
               </div>
             </div>
@@ -553,13 +566,13 @@ export default function FacultyStudentMonitoringPage() {
                 </strong>
               </div>
               <div className="mt-1.5">
-                <ProgressBar value={studentDetail.factors?.progress_consistency ?? 0} size="sm" />
+                <ProgressBar value={studentDetail.factors?.progress_consistency ?? 0} size="sm" tone={(studentDetail.factors?.progress_consistency ?? 0) >= 75 ? "blue" : "amber"} />
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                Task Execution (30%)
+                Task Completion (30%)
               </span>
               <div className="flex items-baseline gap-1 mt-1">
                 <strong className="text-base font-black text-slate-900">
@@ -567,7 +580,7 @@ export default function FacultyStudentMonitoringPage() {
                 </strong>
               </div>
               <div className="mt-1.5">
-                <ProgressBar value={studentDetail.factors?.task_completion ?? 0} size="sm" />
+                <ProgressBar value={studentDetail.factors?.task_completion ?? 0} size="sm" tone={(studentDetail.factors?.task_completion ?? 0) >= 75 ? "emerald" : "amber"} />
               </div>
             </div>
 
@@ -581,7 +594,7 @@ export default function FacultyStudentMonitoringPage() {
                 </strong>
               </div>
               <div className="mt-1.5">
-                <ProgressBar value={studentDetail.factors?.report_submission ?? 0} size="sm" />
+                <ProgressBar value={studentDetail.factors?.report_submission ?? 0} size="sm" tone={(studentDetail.factors?.report_submission ?? 0) >= 75 ? "purple" : "amber"} />
               </div>
             </div>
 
@@ -595,26 +608,28 @@ export default function FacultyStudentMonitoringPage() {
                 </strong>
               </div>
               <div className="mt-1.5">
-                <ProgressBar value={studentDetail.factors?.mentor_feedback ?? 0} size="sm" />
+                <ProgressBar value={studentDetail.factors?.mentor_feedback ?? 0} size="sm" tone={(studentDetail.factors?.mentor_feedback ?? 0) >= 75 ? "emerald" : "amber"} />
               </div>
             </div>
           </div>
 
-          {/* Explainable Reasons & Recommendations */}
+          {/* Contributing Attention Indicators & Recommended Review Action */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            {/* Reasons flagged */}
+            {/* Attention Indicators (Contributing factors) */}
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
                 <ShieldAlert size={14} className="text-amber-600" />
-                <span>Explainable Diagnostic Factors</span>
+                <span>Contributing Attention Indicators</span>
               </h4>
               {studentDetail.reasons && studentDetail.reasons.length > 0 ? (
                 <div className="space-y-2">
                   {studentDetail.reasons.map((r: string, idx: number) => {
                     const isWarning =
+                      r.toLowerCase().includes("below") ||
                       r.toLowerCase().includes("overdue") ||
                       r.toLowerCase().includes("behind") ||
                       r.toLowerCase().includes("pending") ||
+                      r.toLowerCase().includes("inconsistent") ||
                       r.toLowerCase().includes("incomplete");
                     return (
                       <div
@@ -636,15 +651,21 @@ export default function FacultyStudentMonitoringPage() {
               )}
             </div>
 
-            {/* Recommendations */}
+            {/* Recommended Review Action */}
             <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-200/70">
               <h4 className="text-xs font-extrabold uppercase tracking-wider text-blue-900 mb-2 flex items-center gap-1.5">
                 <Target size={14} className="text-blue-700" />
-                <span>Actionable Faculty Recommendations</span>
+                <span>Recommended Review Action</span>
               </h4>
-              {studentDetail.recommendations && studentDetail.recommendations.length > 0 ? (
-                <div className="space-y-2">
-                  {studentDetail.recommendations.map((rec: string, idx: number) => (
+              <div className="space-y-2">
+                {studentDetail.attention_status === "NEEDS_ATTENTION" && (
+                  <div className="p-2.5 rounded-lg text-xs font-bold bg-rose-50 border border-rose-200 text-rose-900 flex items-start gap-2 shadow-2xs">
+                    <span className="shrink-0 text-rose-600">⚠️</span>
+                    <span>Faculty review recommended: 1-on-1 academic check-in with intern.</span>
+                  </div>
+                )}
+                {studentDetail.recommendations && studentDetail.recommendations.length > 0 ? (
+                  studentDetail.recommendations.map((rec: string, idx: number) => (
                     <div
                       key={idx}
                       className="p-2.5 rounded-lg text-xs font-semibold bg-white border border-blue-200 text-blue-900 flex items-start gap-2 shadow-2xs"
@@ -652,21 +673,21 @@ export default function FacultyStudentMonitoringPage() {
                       <span className="shrink-0 text-blue-600">💡</span>
                       <span>{rec}</span>
                     </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">No specific recommendations required at this time.</p>
-              )}
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-500 italic">Continue routine weekly logbook monitoring.</p>
+                )}
+              </div>
             </div>
           </div>
         </GlassCard>
 
         {/* ══════════════════════════════════════════════════════════ */}
-        {/* SECTION 5: SKILLS & OBJECTIVES (SKILL GAP ANALYSIS)        */}
+        {/* SECTION 5: SKILL GAP ANALYSIS                              */}
         {/* ══════════════════════════════════════════════════════════ */}
         <GlassCard className="p-5 sm:p-6 border-slate-200/80">
           <SectionHeader
-            title="Technical Competencies & Skill Gap Analysis"
+            title="Skill Gap Analysis"
             subtitle="Deterministic mathematical comparison between acquired student competencies and corporate internship prerequisites."
             badge="Curriculum Alignment"
           />
@@ -676,13 +697,13 @@ export default function FacultyStudentMonitoringPage() {
             <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 flex flex-col justify-between">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                  Competency Fit Score
+                  Skill Match Ratio
                 </span>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl sm:text-3xl font-black text-slate-900">
                     {skillGap.match_percentage}%
                   </span>
-                  <span className="text-xs font-bold text-slate-500">Match Ratio</span>
+                  <span className="text-xs font-bold text-slate-500">Prerequisite Match</span>
                 </div>
                 <div className="mt-2">
                   <ProgressBar
@@ -693,7 +714,7 @@ export default function FacultyStudentMonitoringPage() {
               </div>
 
               <div className="mt-4 pt-3 border-t border-slate-200 text-xs text-slate-600 leading-relaxed">
-                <strong>Curriculum Advice:</strong> {skillGap.recommendation}
+                <strong className="text-slate-800">Recommended Review Action:</strong> {skillGap.recommendation}
               </div>
             </div>
 
@@ -1071,6 +1092,11 @@ export default function FacultyStudentMonitoringPage() {
           </div>
         </Modal>
       )}
+
+      <IntelligenceExplainerModal
+        isOpen={showExplainer}
+        onClose={() => setShowExplainer(false)}
+      />
     </DashboardLayout>
   );
 }
