@@ -33,7 +33,10 @@ export default function HomePage() {
       </nav>
 
       {/* ── Hero Section (Matches Reference Screenshot) ── */}
-      <section className="max-w-5xl mx-auto px-6 pt-20 sm:pt-28 pb-14 sm:pb-20 text-center">
+      <section className="max-w-5xl mx-auto px-6 pt-14 sm:pt-16 pb-14 sm:pb-20 text-center">
+        <div className="flex justify-center mb-8">
+          <SimsLogo variant="full" width={320} />
+        </div>
         <h1 className="text-4xl sm:text-5xl md:text-6xl font-black text-slate-900 tracking-tight leading-[1.18] mb-5">
           Complete Internship Lifecycle<br />
           <span className="text-blue-600">Management &amp; Intelligence</span>
