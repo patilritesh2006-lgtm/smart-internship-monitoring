@@ -63,17 +63,34 @@ $$\mathbf{Frontend\ (Next.js\ 14\ +\ Tailwind\ CSS)} \longleftrightarrow \mathbf
 - Dynamic lifespan startup with automatic table initialization and realistic multi-persona seed data.
 - 21 comprehensive integration tests verifying end-to-end lifecycle, permissions, and analytics.
 
-### 2.3 Responsive Next.js 14 Frontend Application (`frontend/`)
+### 2.3 Premium Next.js 14 Frontend Application (`frontend/`)
 - Built with **Next.js 14 App Router**, **TypeScript**, and **Tailwind CSS**.
+- **Integrated Google Stitch Design System (EduIntern):**
+  - **Student Workspace (Stitch Screens 1 & 3):**
+    - *Weekly Activity & Timesheet Report* header with instant PDF export and weekly log submission.
+    - 3 Stitch KPI Summary Cards (*Total Hours Logged* with progress bar, *Report Status* with due badge, *Supervisor Review* with accreditation score).
+    - Mon–Fri Daily Task Checklist with day filter pills (`ALL`, `MON`, `TUE`, `WED`, `THU`, `FRI`), estimated hours, and live attention score recalculation on checkbox toggle.
+    - *Key Learnings & Blockers* logging with real-time state persistence.
+    - *Supporting Evidence & Artifacts* file preview cards and interactive upload dropzone.
+    - Right rail stack showing *Latest Mentor Feedback* quote with supervisor credentials and *Submission History*.
+  - **Faculty Mentor Workspace (Stitch Screen 5):**
+    - 4 KPI summary cards (*Active Interns*, *Pending Reviews*, *Intervention Queue*, *Cohort Evaluation*).
+    - *Action Recommended Alert Banner* flagging overdue student check-ins with one-click review and dismiss actions.
+    - *Submissions Awaiting Review* cards grid with modal dialog for interactive 1–100 score rating, constructive feedback, and instant grading.
+    - *Student Progress Monitor* table with live status filter pills (`ALL`, `ON_TRACK`, `MONITOR`, `NEEDS_ATTENTION`), search, and milestone progress bars.
+    - Right rail showing *Faculty Coordination* schedule and *Institutional Milestones* timeline.
+  - **Administrative Command Center (Stitch Screens 4 & 2):**
+    - 4 Institutional KPI cards with trend chips and accreditation indicators.
+    - *Active Intervention Queue* table displaying students flagged by the 4-factor intelligence engine, with severity chips (`CRITICAL`, `WARNING`, `MODERATE`) and direct mentor outreach triggers.
+    - *Department Status Distribution* progress bars and enrollment distribution grid.
+    - *Institutional Audit Trail* live activity stream.
+    - *Pending Applications Approval Queue* with faculty mentor allocation and placement authorization controls.
 - **Mobile-First Responsive Layout:**
   - Slide-in navigation drawer on mobile viewports (`< 1024px`) with outside tap dismissal backdrop.
   - Role-specific 5-tab **Bottom Navigation Bar** tailored for Students, Mentors, and Administrators.
   - Responsive **Tables to Touch Cards** pattern ensuring high usability on smartphones.
   - Touch-friendly tap targets ($\ge 44\text{px}$) and notch-safe areas (`env(safe-area-inset-bottom)`).
-- **Student Dashboard:** Real-time attention score gauge, interactive milestone checklist (instant re-scoring upon toggle), weekly report filing, and live skill gap simulator.
-- **Mentor Dashboard:** Priority triage cards and roster, report evaluation queue with numeric scoring and feedback.
-- **Admin Dashboard:** University-wide KPI metrics, cohort attention distribution bar, application approvals with mentor allocation dropdown, and internship publishing form.
-- **Quick 1-Click Demo Login:** Dedicated buttons on the login screen to switch personas instantly without typing.
+- **Quick 1-Click Demo Login:** Dedicated persona switcher cards on landing and login screens to switch between Student, Mentor, and Admin without typing.
 
 ---
 
