@@ -78,6 +78,16 @@ export const api = {
   // Mentor endpoints
   getAssignedInterns: () => request<any[]>("/mentors/me/interns"),
   getPendingReports: () => request<any[]>("/mentors/reports/pending"),
+  getStudentDetail: (studentId: number) => request<any>(`/mentors/students/${studentId}`),
+  recordIntervention: (
+    studentId: number,
+    data: { intervention_type: string; notes: string; action_taken?: string }
+  ) =>
+    request<any>(`/mentors/students/${studentId}/interventions`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getInterventions: (studentId: number) => request<any[]>(`/mentors/students/${studentId}/interventions`),
   reviewReport: (
     reportId: number,
     data: { mentor_feedback?: string; mentor_score?: number; feedback?: string; score?: number }

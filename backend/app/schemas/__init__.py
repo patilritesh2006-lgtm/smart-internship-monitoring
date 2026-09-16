@@ -277,6 +277,82 @@ class InternTriageItem(BaseModel):
     recommendations: List[str] = []
 
 
+# ==============================================================================
+# Intervention Schemas
+# ==============================================================================
+
+class InterventionCreate(BaseModel):
+    intervention_type: str = "1-on-1 Academic Check-in"
+    notes: str
+    action_taken: Optional[str] = None
+
+
+class InterventionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    student_id: int
+    mentor_id: Optional[int] = None
+    mentor_name: Optional[str] = None
+    intervention_type: str
+    notes: str
+    action_taken: Optional[str] = None
+    status: str
+    created_at: datetime
+
+
+class StudentDetailOut(BaseModel):
+    """Full student monitoring detail for faculty inspection - single aggregated response."""
+
+    # Student Profile
+    student_id: int
+    student_name: str
+    student_email: str
+    department: str
+    roll_number: str
+    academic_year: int
+    student_skills: List[str] = []
+
+    # Internship Profile
+    internship_id: int
+    internship_title: str
+    company_name: str
+    internship_description: str
+    internship_location: str
+    internship_status: str
+    duration_weeks: int
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    required_skills: List[str] = []
+
+    # Mentor Info
+    mentor_name: Optional[str] = None
+    mentor_email: Optional[str] = None
+
+    # Tasks / Milestones
+    tasks: List[TaskOut] = []
+    tasks_total: int
+    tasks_completed: int
+
+    # Weekly Reports
+    reports: List[WeeklyReportOut] = []
+    reports_submitted: int
+    reports_expected: int
+
+    # Attention Metrics (from deterministic intelligence engine)
+    attention_score: float
+    attention_status: str
+    factors: ProgressFactorBreakdown
+    reasons: List[str] = []
+    recommendations: List[str] = []
+
+    # Skill Gap Analysis
+    skill_gap: Optional[Dict[str, Any]] = None
+
+    # Interventions History
+    interventions: List[InterventionOut] = []
+
+
 class InstitutionalAnalyticsSchema(BaseModel):
     total_students: int
     total_internships: int
@@ -286,3 +362,4 @@ class InstitutionalAnalyticsSchema(BaseModel):
     monitor_count: int
     needs_attention_count: int
     average_attention_score: float
+

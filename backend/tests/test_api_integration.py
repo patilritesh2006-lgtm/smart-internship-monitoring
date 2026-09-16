@@ -414,3 +414,82 @@ def test_real_database_persistence_cycle(client):
     assert reviewed_report["status"] == "REVIEWED"
     assert reviewed_report["mentor_score"] == 96.0
 
+
+def test_mentor_get_student_detail(client):
+    """Test full student monitoring detail endpoint returning 7-section aggregated data."""
+    turing_login = client.post(
+        "/api/auth/login",
+        json={"email": "mentor.turing@university.edu", "password": "Mentor@123"},
+    )
+    token = turing_login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Get student Alex Chen (student_id 2 or 1 in DB)
+    interns = client.get("/api/mentors/me/interns", headers=headers).json()
+    assert len(interns) > 0
+    target_student_id = interns[0]["student_id"]
+
+    detail_res = client.get(f"/api/mentors/students/{target_student_id}", headers=headers)
+    assert detail_res.status_code == 200
+    data = detail_res.json()
+
+    # Verify Profile
+    assert data["student_id"] == target_student_id
+    assert "student_name" in data
+    assert "department" in data
+    assert "company_name" in data
+    assert "internship_title" in data
+
+    # Verify Progress & Attention
+    assert "attention_score" in data
+    assert "attention_status" in data
+    assert "factors" in data
+    assert "reasons" in data
+    assert "recommendations" in data
+
+    # Verify Tasks and Reports
+    assert isinstance(data["tasks"], list)
+    assert isinstance(data["reports"], list)
+
+    # Verify Skill Gap
+    assert "skill_gap" in data
+    assert "match_percentage" in data["skill_gap"]
+    assert "matched_skills" in data["skill_gap"]
+
+
+def test_mentor_record_and_get_interventions(client):
+    """Test recording faculty intervention and re-querying intervention history."""
+    turing_login = client.post(
+        "/api/auth/login",
+        json={"email": "mentor.turing@university.edu", "password": "Mentor@123"},
+    )
+    token = turing_login.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    interns = client.get("/api/mentors/me/interns", headers=headers).json()
+    assert len(interns) > 0
+    target_student_id = interns[0]["student_id"]
+
+    # Record intervention
+    create_res = client.post(
+        f"/api/mentors/students/{target_student_id}/interventions",
+        json={
+            "intervention_type": "1-on-1 Academic Check-in",
+            "notes": "Met with student to review backend architecture and report submissions.",
+            "action_taken": "Agreed on weekly Friday sync schedule.",
+        },
+        headers=headers,
+    )
+    assert create_res.status_code == 201
+    intervention_data = create_res.json()
+    assert intervention_data["student_id"] == target_student_id
+    assert intervention_data["intervention_type"] == "1-on-1 Academic Check-in"
+
+    # Get interventions list
+    list_res = client.get(f"/api/mentors/students/{target_student_id}/interventions", headers=headers)
+    assert list_res.status_code == 200
+    interventions = list_res.json()
+    assert len(interventions) >= 1
+    assert any(i["notes"] == "Met with student to review backend architecture and report submissions." for i in interventions)
+
+

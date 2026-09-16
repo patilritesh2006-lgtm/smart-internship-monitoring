@@ -50,6 +50,7 @@ class Student(Base):
     active_internships = relationship("Internship", back_populates="student")
     tasks = relationship("Task", back_populates="student", cascade="all, delete-orphan")
     reports = relationship("WeeklyReport", back_populates="student", cascade="all, delete-orphan")
+    interventions = relationship("Intervention", back_populates="student", cascade="all, delete-orphan")
 
 
 class Mentor(Base):
@@ -64,6 +65,7 @@ class Mentor(Base):
 
     user = relationship("User", back_populates="mentor_profile")
     assigned_internships = relationship("Internship", back_populates="mentor")
+    interventions = relationship("Intervention", back_populates="mentor")
 
 
 class Company(Base):
@@ -177,3 +179,20 @@ class WeeklyReport(Base):
 
     internship = relationship("Internship", back_populates="reports")
     student = relationship("Student", back_populates="reports")
+
+
+class Intervention(Base):
+    __tablename__ = "interventions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    mentor_id = Column(Integer, ForeignKey("mentors.id", ondelete="SET NULL"), nullable=True)
+    intervention_type = Column(String(100), nullable=False)  # e.g. "1-on-1 Academic Check-in"
+    notes = Column(Text, nullable=False)
+    action_taken = Column(String(255), nullable=True)
+    status = Column(String(50), default="COMPLETED", nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    student = relationship("Student", back_populates="interventions")
+    mentor = relationship("Mentor", back_populates="interventions")
+

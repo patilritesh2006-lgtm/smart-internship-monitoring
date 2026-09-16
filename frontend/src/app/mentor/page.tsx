@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatusBadge } from "@/components/StatusBadge";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -406,13 +407,13 @@ export default function MentorPortal() {
                 >
                   Dismiss Banner
                 </button>
-                <button
-                  onClick={() => setSelectedIntern(topPriorityStudent)}
+                <Link
+                  href={`/mentor/students/${topPriorityStudent.student_id}`}
                   className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
                 >
                   <Eye size={13} />
                   <span>Inspect &amp; Intervene</span>
-                </button>
+                </Link>
               </div>
             </div>
           )}
@@ -690,14 +691,23 @@ export default function MentorPortal() {
                           </td>
 
                           <td className="py-3 px-3 text-right">
-                            <button
-                              onClick={() => setSelectedIntern(stu)}
-                              className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg border border-blue-200/70 transition-colors inline-flex items-center gap-1"
-                              title="Inspect record and log intervention"
-                            >
-                              <Eye size={13} />
-                              <span>Intervene</span>
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Link
+                                href={`/mentor/students/${stu.student_id}`}
+                                className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors inline-flex items-center gap-1"
+                                title="Open full student monitoring detail page"
+                              >
+                                <Eye size={13} />
+                                <span>Inspect</span>
+                              </Link>
+                              <button
+                                onClick={() => setSelectedIntern(stu)}
+                                className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
+                                title="Quick intervention modal"
+                              >
+                                Quick Log
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -763,13 +773,21 @@ export default function MentorPortal() {
                         <span>Score: {stu.average_mentor_score !== null ? `${stu.average_mentor_score}/100` : "Pending"}</span>
                       </div>
 
-                      <button
-                        onClick={() => setSelectedIntern(stu)}
-                        className="w-full py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl border border-blue-200/70 transition-colors inline-flex items-center justify-center gap-1.5"
-                      >
-                        <Eye size={13} />
-                        <span>Inspect Record &amp; Record Intervention</span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <Link
+                          href={`/mentor/students/${stu.student_id}`}
+                          className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors inline-flex items-center justify-center gap-1.5"
+                        >
+                          <Eye size={13} />
+                          <span>Full Monitoring Detail</span>
+                        </Link>
+                        <button
+                          onClick={() => setSelectedIntern(stu)}
+                          className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors"
+                        >
+                          Quick Log
+                        </button>
+                      </div>
                     </div>
                   );
                 })
