@@ -88,7 +88,7 @@ export default function MentorPortal() {
       else if (user.role !== "MENTOR") router.push(user.role === "ADMIN" ? "/admin" : "/student");
       else loadData();
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
   const loadData = async () => {
     setRefreshing(true);

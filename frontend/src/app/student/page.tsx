@@ -114,7 +114,7 @@ export default function StudentPortal() {
       else if (user.role !== "STUDENT") router.push(user.role === "ADMIN" ? "/admin" : "/mentor");
       else loadData();
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
   const loadData = async () => {
     setLoading(true);

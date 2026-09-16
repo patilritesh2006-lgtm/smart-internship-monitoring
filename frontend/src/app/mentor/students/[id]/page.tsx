@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/DashboardLayout";
@@ -79,19 +79,8 @@ export default function FacultyStudentMonitoringPage() {
   // Active Tab for Evidence Timeline
   const [timelineFilter, setTimelineFilter] = useState<"ALL" | "REPORTS" | "TASKS" | "INTERVENTIONS">("ALL");
 
-  useEffect(() => {
-    if (!authLoading) {
-      if (!user) {
-        router.push("/login");
-      } else if (user.role !== "MENTOR" && user.role !== "ADMIN") {
-        router.push("/student");
-      } else if (studentId) {
-        loadStudentDetail();
-      }
-    }
-  }, [user, authLoading, studentId]);
-
-  const loadStudentDetail = async () => {
+  const loadStudentDetail = useCallback(async () => {
+    if (!studentId) return;
     setRefreshing(true);
     setError(null);
     try {
@@ -103,7 +92,19 @@ export default function FacultyStudentMonitoringPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [studentId]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      if (!user) {
+        router.push("/login");
+      } else if (user.role !== "MENTOR" && user.role !== "ADMIN") {
+        router.push("/student");
+      } else if (studentId) {
+        loadStudentDetail();
+      }
+    }
+  }, [user, authLoading, studentId, router, loadStudentDetail]);
 
   const handleOpenReviewModal = (report: any) => {
     setSelectedReport(report);

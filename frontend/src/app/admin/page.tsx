@@ -104,7 +104,7 @@ export default function AdminPortal() {
         loadData();
       }
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, router]);
 
   const loadData = async () => {
     setRefreshing(true);
