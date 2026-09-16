@@ -1,9 +1,9 @@
 # Smart Internship Management & Monitoring System (SIMS)
 
-[![Tests: 61 passed](https://img.shields.io/badge/Tests-61%20Passed-brightgreen)](https://github.com/patilritesh2006-lgtm/smart-internship-management)
-[![Build: Passed](https://img.shields.io/badge/Next.js%2014-Build%20Passed-blue)](https://github.com/patilritesh2006-lgtm/smart-internship-management)
-[![Responsive: Mobile%20%2B%20Web](https://img.shields.io/badge/Responsive-Mobile%20%2B%20Tablet%20%2B%20Web-purple)](https://github.com/patilritesh2006-lgtm/smart-internship-management)
-[![License: MIT](https://img.shields.io/badge/License-MIT-green)](https://github.com/patilritesh2006-lgtm/smart-internship-management)
+[![Tests: 61 passed](https://img.shields.io/badge/Tests-61%20Passed-brightgreen)](https://github.com/patilritesh2006-lgtm/smart-internship-monitoring)
+[![Build: Passed](https://img.shields.io/badge/Next.js%2014-Build%20Passed-blue)](https://github.com/patilritesh2006-lgtm/smart-internship-monitoring)
+[![Responsive: Mobile%20%2B%20Web](https://img.shields.io/badge/Responsive-Mobile%20%2B%20Tablet%20%2B%20Web-purple)](https://github.com/patilritesh2006-lgtm/smart-internship-monitoring)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green)](https://github.com/patilritesh2006-lgtm/smart-internship-monitoring)
 
 An end-to-end full-stack university internship management, monitoring, and deterministic intelligence platform bridging academic oversight with real-time student progress analytics.
 
