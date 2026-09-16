@@ -3,6 +3,8 @@ Intelligence and Analytics Module for Smart Internship Management and Monitoring
 """
 
 from intelligence.app.models import (
+    AttentionStatus,
+    ProgressAttentionEngineResult,
     ProgressAttentionResult,
     ProgressBreakdown,
     ProgressData,
@@ -12,9 +14,14 @@ from intelligence.app.models import (
     SkillGapResult,
 )
 from intelligence.app.progress_analysis import (
+    MONITOR_THRESHOLD_SCORE,
+    ON_TRACK_THRESHOLD,
+    ProgressAttentionEngine,
     analyze_progress_attention,
     batch_analyze_progress,
     calculate_attention_score,
+    calculate_progress_attention,
+    evaluate_progress_attention,
 )
 from intelligence.app.skill_gap import (
     analyze_skill_gap,
@@ -27,9 +34,16 @@ __all__ = [
     "SkillGapResult",
     "ProgressTrend",
     "ProgressStatus",
+    "AttentionStatus",
     "ProgressData",
     "ProgressBreakdown",
     "ProgressAttentionResult",
+    "ProgressAttentionEngineResult",
+    "ProgressAttentionEngine",
+    "evaluate_progress_attention",
+    "calculate_progress_attention",
+    "ON_TRACK_THRESHOLD",
+    "MONITOR_THRESHOLD_SCORE",
     "analyze_skill_gap",
     "generate_skill_recommendation",
     "batch_analyze_skill_gaps",
@@ -37,3 +51,4 @@ __all__ = [
     "analyze_progress_attention",
     "batch_analyze_progress",
 ]
+

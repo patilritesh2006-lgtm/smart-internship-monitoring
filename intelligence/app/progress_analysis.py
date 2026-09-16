@@ -6,6 +6,8 @@ Provides transparent, explainable scoring to identify interns who may need suppo
 from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 from intelligence.app.models import (
+    AttentionStatus,
+    ProgressAttentionEngineResult,
     ProgressAttentionResult,
     ProgressBreakdown,
     ProgressData,
@@ -183,3 +185,184 @@ def batch_analyze_progress(records: List[Dict[str, Any]]) -> pd.DataFrame:
         })
 
     return pd.DataFrame(results)
+
+
+# ---------------------------------------------------------------------------
+# Internship Progress Attention Engine
+# ---------------------------------------------------------------------------
+
+# Factor weights (sum to 1.0 / 100%)
+WEIGHT_PROGRESS_CONSISTENCY = 0.30
+WEIGHT_TASK_COMPLETION = 0.30
+WEIGHT_REPORT_SUBMISSION = 0.20
+WEIGHT_MENTOR_FEEDBACK = 0.20
+
+# Status thresholds (configurable constants)
+ON_TRACK_THRESHOLD = 75.0
+MONITOR_THRESHOLD_SCORE = 50.0
+
+# Metric benchmark threshold for flagging issues
+FACTOR_BENCHMARK_THRESHOLD = 75.0
+
+
+class ProgressAttentionEngine:
+    """
+    Internship Progress Attention Engine.
+    Analyzes internship progress data and determines whether a student is:
+      - ON_TRACK
+      - MONITOR
+      - NEEDS_ATTENTION
+
+    Input Factors:
+      1. Progress consistency  — 30%
+      2. Task completion       — 30%
+      3. Report submission     — 20%
+      4. Mentor feedback       — 20%
+
+    Formula:
+      score = (progress_consistency * 0.30) +
+              (task_completion * 0.30) +
+              (report_submission * 0.20) +
+              (mentor_feedback * 0.20)
+    """
+
+    # Constants exposed on class for easy inspection and override
+    WEIGHT_PROGRESS_CONSISTENCY = WEIGHT_PROGRESS_CONSISTENCY
+    WEIGHT_TASK_COMPLETION = WEIGHT_TASK_COMPLETION
+    WEIGHT_REPORT_SUBMISSION = WEIGHT_REPORT_SUBMISSION
+    WEIGHT_MENTOR_FEEDBACK = WEIGHT_MENTOR_FEEDBACK
+
+    ON_TRACK_THRESHOLD = ON_TRACK_THRESHOLD
+    MONITOR_THRESHOLD = MONITOR_THRESHOLD_SCORE
+    BENCHMARK_THRESHOLD = FACTOR_BENCHMARK_THRESHOLD
+
+    @classmethod
+    def validate_inputs(
+        cls,
+        progress_consistency: Union[int, float],
+        task_completion: Union[int, float],
+        report_submission: Union[int, float],
+        mentor_feedback: Union[int, float],
+    ) -> None:
+        """
+        Validates that all input metrics are numeric and strictly within 0–100 inclusive.
+        Raises TypeError if non-numeric, or ValueError if outside 0–100.
+        """
+        factors = {
+            "progress_consistency": progress_consistency,
+            "task_completion": task_completion,
+            "report_submission": report_submission,
+            "mentor_feedback": mentor_feedback,
+        }
+        for name, val in factors.items():
+            if val is None or isinstance(val, bool) or not isinstance(val, (int, float)):
+                raise TypeError(
+                    f"'{name}' must be a numeric value (int or float). Got: {type(val).__name__}"
+                )
+            if val < 0 or val > 100:
+                raise ValueError(
+                    f"'{name}' must be between 0 and 100 inclusive. Received: {val}"
+                )
+
+    @classmethod
+    def evaluate(
+        cls,
+        progress_consistency: Union[int, float],
+        task_completion: Union[int, float],
+        report_submission: Union[int, float],
+        mentor_feedback: Union[int, float],
+    ) -> ProgressAttentionEngineResult:
+        """
+        Evaluates progress metrics and returns an explainable attention result.
+        """
+        cls.validate_inputs(
+            progress_consistency=progress_consistency,
+            task_completion=task_completion,
+            report_submission=report_submission,
+            mentor_feedback=mentor_feedback,
+        )
+
+        # Calculate overall weighted score
+        raw_score = (
+            (progress_consistency * cls.WEIGHT_PROGRESS_CONSISTENCY)
+            + (task_completion * cls.WEIGHT_TASK_COMPLETION)
+            + (report_submission * cls.WEIGHT_REPORT_SUBMISSION)
+            + (mentor_feedback * cls.WEIGHT_MENTOR_FEEDBACK)
+        )
+        calc_score = round(raw_score, 2)
+        score: Union[int, float] = int(calc_score) if calc_score.is_integer() else calc_score
+
+        # Determine status
+        if score >= cls.ON_TRACK_THRESHOLD:
+            status = AttentionStatus.ON_TRACK.value
+        elif score >= cls.MONITOR_THRESHOLD:
+            status = AttentionStatus.MONITOR.value
+        else:
+            status = AttentionStatus.NEEDS_ATTENTION.value
+
+        reasons: List[str] = []
+        recommendations: List[str] = []
+
+        # Explainable reasons & recommendations:
+        # Progress consistency
+        if progress_consistency >= cls.BENCHMARK_THRESHOLD:
+            reasons.append("Progress is consistent.")
+        else:
+            reasons.append("Progress consistency is below the expected level.")
+            recommendations.append("Maintain regular progress updates.")
+
+        # Task completion
+        if task_completion < cls.BENCHMARK_THRESHOLD:
+            reasons.append("Task completion is below the expected level.")
+            recommendations.append("Complete pending tasks.")
+
+        # Weekly reports
+        if report_submission < cls.BENCHMARK_THRESHOLD:
+            reasons.append("Weekly reports are missing.")
+            recommendations.append("Submit pending weekly reports.")
+
+        # Mentor feedback
+        if mentor_feedback < cls.BENCHMARK_THRESHOLD:
+            reasons.append("Mentor feedback is pending.")
+            recommendations.append("Request mentor feedback.")
+
+        # If on track and no issues exist, provide positive maintenance recommendation
+        if status == AttentionStatus.ON_TRACK.value and not recommendations:
+            recommendations.append("Maintain regular progress updates.")
+
+        return ProgressAttentionEngineResult(
+            score=score,
+            status=status,
+            reasons=reasons,
+            recommendations=recommendations,
+        )
+
+
+def evaluate_progress_attention(
+    progress_consistency: Union[int, float],
+    task_completion: Union[int, float],
+    report_submission: Union[int, float],
+    mentor_feedback: Union[int, float],
+) -> ProgressAttentionEngineResult:
+    """
+    Convenience function invoking ProgressAttentionEngine.evaluate.
+
+    Parameters:
+        progress_consistency: Metric from 0 to 100 (30% weight)
+        task_completion: Metric from 0 to 100 (30% weight)
+        report_submission: Metric from 0 to 100 (20% weight)
+        mentor_feedback: Metric from 0 to 100 (20% weight)
+
+    Returns:
+        ProgressAttentionEngineResult with score, status, reasons, and recommendations.
+    """
+    return ProgressAttentionEngine.evaluate(
+        progress_consistency=progress_consistency,
+        task_completion=task_completion,
+        report_submission=report_submission,
+        mentor_feedback=mentor_feedback,
+    )
+
+
+calculate_progress_attention = evaluate_progress_attention
+

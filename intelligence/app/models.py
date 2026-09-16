@@ -188,3 +188,59 @@ class ProgressAttentionResult(BaseModel):
             }
         }
     )
+
+
+class AttentionStatus(str, Enum):
+    """Categorical attention status for internship progress attention engine."""
+    ON_TRACK = "ON_TRACK"
+    MONITOR = "MONITOR"
+    NEEDS_ATTENTION = "NEEDS_ATTENTION"
+
+
+class ProgressAttentionEngineResult(BaseModel):
+    """Structured result from the Internship Progress Attention Engine."""
+    score: Union[int, float] = Field(
+        ge=0,
+        le=100,
+        description="Overall weighted progress attention score (0 to 100)"
+    )
+    status: str = Field(
+        description="Attention status: 'ON_TRACK', 'MONITOR', or 'NEEDS_ATTENTION'"
+    )
+    reasons: List[str] = Field(
+        default_factory=list,
+        description="Explainable reasons clarifying the evaluated status"
+    )
+    recommendations: List[str] = Field(
+        default_factory=list,
+        description="Simple actionable recommendations based on detected issues"
+    )
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "score": 75,
+                "status": "ON_TRACK",
+                "reasons": [
+                    "Progress is consistent.",
+                    "Task completion is below the expected level.",
+                    "Mentor feedback is pending."
+                ],
+                "recommendations": [
+                    "Complete pending tasks.",
+                    "Request mentor feedback."
+                ]
+            }
+        }
+    )
+
+    def __getitem__(self, item: str):
+        if hasattr(self, item):
+            return getattr(self, item)
+        raise KeyError(item)
+
+    def get(self, key: str, default=None):
+        return getattr(self, key, default)
+
+    def __contains__(self, key: str) -> bool:
+        return hasattr(self, key)
