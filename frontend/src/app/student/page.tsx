@@ -550,6 +550,17 @@ export default function StudentPortal() {
                     <span>Current: Week {currentWeek}</span>
                     <span>Week {durationWeeks} (Target)</span>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-3 pt-3 mt-2 border-t border-slate-100 text-xs">
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-emerald-50/70 border border-emerald-100">
+                      <span className="text-emerald-700 font-medium">Completed Tasks</span>
+                      <strong className="text-emerald-800 font-bold">{completedTasks}</strong>
+                    </div>
+                    <div className="flex items-center justify-between p-2 rounded-lg bg-amber-50/70 border border-amber-100">
+                      <span className="text-amber-700 font-medium">Pending Tasks</span>
+                      <strong className="text-amber-800 font-bold">{pendingTasks}</strong>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -715,12 +726,21 @@ export default function StudentPortal() {
                   Accredited weekly hours and task summaries submitted for faculty verification.
                 </p>
               </div>
-              <button
-                onClick={() => setShowSubmitModal(true)}
-                className="btn-primary text-xs shrink-0 self-start sm:self-auto"
-              >
-                Submit Week {reportWeek} Report
-              </button>
+              <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto flex-wrap">
+                <button
+                  onClick={() => setActiveTab("timesheets")}
+                  className="stitch-pill-btn py-2 px-3 text-xs inline-flex items-center gap-1.5"
+                >
+                  <FileText size={14} />
+                  <span>Timesheet Interface</span>
+                </button>
+                <button
+                  onClick={() => setShowSubmitModal(true)}
+                  className="btn-primary text-xs"
+                >
+                  Submit Week {reportWeek} Report
+                </button>
+              </div>
             </div>
 
             {reports.length === 0 ? (
@@ -818,8 +838,40 @@ export default function StudentPortal() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-200">
                   <div>
+                    <span className="text-xs font-bold text-slate-700 block mb-1.5 flex items-center gap-1">
+                      <Briefcase size={13} className="text-blue-600" /> Required Placement Skills ({(gapResult.required_skills || internship?.required_skills || []).length})
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(gapResult.required_skills || internship?.required_skills || []).map((s: string) => (
+                        <span
+                          key={s}
+                          className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-50 text-blue-800 border border-blue-200"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-xs font-bold text-slate-700 block mb-1.5 flex items-center gap-1">
+                      <Award size={13} className="text-indigo-600" /> Student Profile Skills ({(profile?.skills || []).length})
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(profile?.skills || []).map((s: string) => (
+                        <span
+                          key={s}
+                          className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-slate-100 text-slate-800 border border-slate-200"
+                        >
+                          {s}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
                     <span className="text-xs font-bold text-emerald-700 block mb-1.5 flex items-center gap-1">
-                      <Check size={13} strokeWidth={3} /> Matched Skills ({gapResult.matched_skills?.length || 0})
+                      <Check size={13} strokeWidth={3} /> Matched Competencies ({gapResult.matched_skills?.length || 0})
                     </span>
                     <div className="flex flex-wrap gap-1.5">
                       {(gapResult.matched_skills || []).map((s: string) => (
