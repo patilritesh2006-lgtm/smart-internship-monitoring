@@ -298,7 +298,7 @@ def test_engine_4_missing_reports():
         mentor_feedback=80,
     )
 
-    assert "Weekly reports are missing." in result.reasons
+    assert "Weekly reports are pending." in result.reasons
     assert "Submit pending weekly reports." in result.recommendations
 
 
@@ -373,31 +373,183 @@ def test_engine_8_invalid_input_values():
 
 
 def test_engine_prompt_example():
-    """Verifies the exact scenario and formula from the prompt."""
-    res = evaluate_progress_attention(
-        progress_consistency=80,
-        task_completion=70,
-        report_submission=100,
-        mentor_feedback=50,
-    )
-    # (80 * 0.30) + (70 * 0.30) + (100 * 0.20) + (50 * 0.20) = 24 + 21 + 20 + 10 = 75
-    assert res.score == 75
-    assert res.status == "ON_TRACK"
-    assert "Progress is consistent." in res.reasons
-    assert "Task completion is below the expected level." in res.reasons
-    assert "Mentor feedback is pending." in res.reasons
-    assert "Complete pending tasks." in res.recommendations
-    assert "Request mentor feedback." in res.recommendations
+    """Verifies the exact scenario and formula from prompt 4."""
+    data = {
+        "progress_consistency": 80,
+        "task_completion": 60,
+        "report_submission": 80,
+        "mentor_feedback": 50,
+    }
+    # (80 * 0.30) + (60 * 0.30) + (80 * 0.20) + (50 * 0.20) = 24 + 18 + 16 + 10 = 68
+    res = evaluate_progress_attention(data)
+    assert res.score == 68
+    assert res.status == "MONITOR"
+    assert res.reasons == [
+        "Task completion is below the expected level.",
+        "Mentor feedback is pending.",
+    ]
+    assert res.recommendations == [
+        "Complete pending tasks.",
+        "Request mentor feedback.",
+    ]
 
     # Dict subscript access
-    assert res["score"] == 75
-    assert res["status"] == "ON_TRACK"
+    assert res["score"] == 68
+    assert res["status"] == "MONITOR"
     assert "reasons" in res
     assert "recommendations" in res
     assert res.get("missing", "default") == "default"
 
     with pytest.raises(KeyError):
         _ = res["nonexistent"]
+
+
+def test_engine_all_factors_high():
+    """All factors high evaluates to ON_TRACK with positive progress confirmation."""
+    data = {
+        "progress_consistency": 90,
+        "task_completion": 90,
+        "report_submission": 90,
+        "mentor_feedback": 90,
+    }
+    res = evaluate_progress_attention(data)
+    assert res.score == 90
+    assert res.status == "ON_TRACK"
+    assert res.reasons == ["Progress is consistent."]
+    assert res.recommendations == ["Maintain regular progress updates."]
+    assert len(res.reasons) == len(set(res.reasons))
+    assert len(res.recommendations) == len(set(res.recommendations))
+
+
+def test_engine_all_factors_low():
+    """All factors low evaluates to NEEDS_ATTENTION with distinct reasons and recommendations."""
+    data = {
+        "progress_consistency": 30,
+        "task_completion": 30,
+        "report_submission": 30,
+        "mentor_feedback": 30,
+    }
+    res = evaluate_progress_attention(data)
+    assert res.score == 30
+    assert res.status == "NEEDS_ATTENTION"
+    assert len(res.reasons) == 4
+    assert len(res.recommendations) == 4
+    assert "Task completion is below the expected level." in res.reasons
+    assert "Weekly reports are pending." in res.reasons
+    assert "Mentor feedback is pending." in res.reasons
+    assert "Progress updates are inconsistent." in res.reasons
+    assert len(res.reasons) == len(set(res.reasons))
+    assert len(res.recommendations) == len(set(res.recommendations))
+
+
+def test_engine_only_task_completion_low():
+    """Only task completion low generates only task-related reason and recommendation."""
+    data = {
+        "progress_consistency": 85,
+        "task_completion": 50,
+        "report_submission": 85,
+        "mentor_feedback": 85,
+    }
+    res = evaluate_progress_attention(data)
+    assert res.reasons == ["Task completion is below the expected level."]
+    assert res.recommendations == ["Complete pending tasks."]
+
+
+def test_engine_only_reports_low():
+    """Only reports low generates only reports-related reason and recommendation."""
+    data = {
+        "progress_consistency": 85,
+        "task_completion": 85,
+        "report_submission": 40,
+        "mentor_feedback": 85,
+    }
+    res = evaluate_progress_attention(data)
+    assert res.reasons == ["Weekly reports are pending."]
+    assert res.recommendations == ["Submit pending weekly reports."]
+
+
+def test_engine_only_mentor_feedback_low():
+    """Only mentor feedback low generates only mentor-related reason and recommendation."""
+    data = {
+        "progress_consistency": 85,
+        "task_completion": 85,
+        "report_submission": 85,
+        "mentor_feedback": 40,
+    }
+    res = evaluate_progress_attention(data)
+    assert res.reasons == ["Mentor feedback is pending."]
+    assert res.recommendations == ["Request mentor feedback."]
+
+
+def test_engine_invalid_inputs_comprehensive():
+    """Verifies edge cases: empty input, missing values, out of range, non-numeric."""
+    # Empty input
+    with pytest.raises((ValueError, TypeError), match="empty"):
+        evaluate_progress_attention({})
+
+    with pytest.raises((ValueError, TypeError), match="empty"):
+        evaluate_progress_attention()
+
+    # Missing value
+    with pytest.raises((ValueError, TypeError), match="Missing required progress metric"):
+        evaluate_progress_attention({"progress_consistency": 80, "task_completion": 70})
+
+    # Below 0
+    with pytest.raises((ValueError, TypeError), match="between 0 and 100"):
+        evaluate_progress_attention({"progress_consistency": -10, "task_completion": 70, "report_submission": 80, "mentor_feedback": 80})
+
+    # Above 100
+    with pytest.raises((ValueError, TypeError), match="between 0 and 100"):
+        evaluate_progress_attention({"progress_consistency": 80, "task_completion": 120, "report_submission": 80, "mentor_feedback": 80})
+
+    # Non-numeric
+    with pytest.raises((ValueError, TypeError), match="numeric"):
+        evaluate_progress_attention({"progress_consistency": "high", "task_completion": 70, "report_submission": 80, "mentor_feedback": 80})
+
+    # Boolean value
+    with pytest.raises((ValueError, TypeError), match="boolean"):
+        evaluate_progress_attention({"progress_consistency": True, "task_completion": 70, "report_submission": 80, "mentor_feedback": 80})
+
+    # NaN / Inf
+    import math
+    with pytest.raises((ValueError, TypeError), match="finite"):
+        evaluate_progress_attention({"progress_consistency": float("nan"), "task_completion": 70, "report_submission": 80, "mentor_feedback": 80})
+
+
+def test_engine_no_duplicate_reasons():
+    """Ensures duplicate reasons and recommendations are prevented across diverse evaluations."""
+    cases = [
+        {"progress_consistency": 40, "task_completion": 40, "report_submission": 40, "mentor_feedback": 40},
+        {"progress_consistency": 90, "task_completion": 50, "report_submission": 90, "mentor_feedback": 50},
+        {"progress_consistency": 100, "task_completion": 100, "report_submission": 100, "mentor_feedback": 100},
+    ]
+    for case in cases:
+        res = evaluate_progress_attention(case)
+        assert len(res.reasons) == len(set(res.reasons)), f"Duplicate reasons found in: {res.reasons}"
+        assert len(res.recommendations) == len(set(res.recommendations)), f"Duplicate recommendations found in: {res.recommendations}"
+
+
+def test_engine_pydantic_model_input():
+    """Validates that a Pydantic model can be passed directly into evaluate_progress_attention."""
+    from pydantic import BaseModel
+
+    class ProgressInputSchema(BaseModel):
+        progress_consistency: float
+        task_completion: float
+        report_submission: float
+        mentor_feedback: float
+
+    model_data = ProgressInputSchema(
+        progress_consistency=80.0,
+        task_completion=60.0,
+        report_submission=80.0,
+        mentor_feedback=50.0,
+    )
+    res = evaluate_progress_attention(model_data)
+    assert res.score == 68
+    assert res.status == "MONITOR"
+
+
 
 
 

@@ -188,8 +188,10 @@ def batch_analyze_progress(records: List[Dict[str, Any]]) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Internship Progress Attention Engine
+# Internship Progress Attention Engine (Prompt 4 Refined)
 # ---------------------------------------------------------------------------
+import math
+from pydantic import BaseModel
 
 # Factor weights (sum to 1.0 / 100%)
 WEIGHT_PROGRESS_CONSISTENCY = 0.30
@@ -205,13 +207,29 @@ MONITOR_THRESHOLD_SCORE = 50.0
 FACTOR_BENCHMARK_THRESHOLD = 75.0
 
 
+class ProgressValidationError(ValueError, TypeError):
+    """Raised when progress attention inputs fail validation (subclasses ValueError & TypeError)."""
+    pass
+
+
+def _deduplicate(items: List[str]) -> List[str]:
+    """Preserves order while eliminating duplicate strings."""
+    seen = set()
+    result = []
+    for item in items:
+        if item not in seen:
+            seen.add(item)
+            result.append(item)
+    return result
+
+
 class ProgressAttentionEngine:
     """
     Internship Progress Attention Engine.
-    Analyzes internship progress data and determines whether a student is:
-      - ON_TRACK
-      - MONITOR
-      - NEEDS_ATTENTION
+    Analyzes structured internship progress data and determines whether a student is:
+      - ON_TRACK (75–100)
+      - MONITOR (50–74)
+      - NEEDS_ATTENTION (0–49)
 
     Input Factors:
       1. Progress consistency  — 30%
@@ -237,57 +255,117 @@ class ProgressAttentionEngine:
     BENCHMARK_THRESHOLD = FACTOR_BENCHMARK_THRESHOLD
 
     @classmethod
-    def validate_inputs(
+    def validate_and_extract(
         cls,
-        progress_consistency: Union[int, float],
-        task_completion: Union[int, float],
-        report_submission: Union[int, float],
-        mentor_feedback: Union[int, float],
-    ) -> None:
+        data: Optional[Union[Dict[str, Any], BaseModel, int, float]] = None,
+        task_completion: Optional[Union[int, float]] = None,
+        report_submission: Optional[Union[int, float]] = None,
+        mentor_feedback: Optional[Union[int, float]] = None,
+        *,
+        progress_consistency: Optional[Union[int, float]] = None,
+        **kwargs: Any,
+    ) -> Dict[str, Union[int, float]]:
         """
-        Validates that all input metrics are numeric and strictly within 0–100 inclusive.
-        Raises TypeError if non-numeric, or ValueError if outside 0–100.
+        Validates and extracts the 4 required progress metrics from dict, model,
+        or positional/keyword arguments.
         """
+        pc = progress_consistency
+        tc = task_completion
+        rs = report_submission
+        mf = mentor_feedback
+
+        # Case 1: Empty input check
+        if data == {} or (data is None and pc is None and tc is None and rs is None and mf is None):
+            raise ProgressValidationError(
+                "Input data cannot be empty. Expected fields: 'progress_consistency', "
+                "'task_completion', 'report_submission', 'mentor_feedback'."
+            )
+
+        # Case 2: Dict input
+        if isinstance(data, dict):
+            required_keys = ["progress_consistency", "task_completion", "report_submission", "mentor_feedback"]
+            for key in required_keys:
+                if key not in data:
+                    raise ProgressValidationError(f"Missing required progress metric: '{key}'.")
+            pc = data.get("progress_consistency", pc)
+            tc = data.get("task_completion", tc)
+            rs = data.get("report_submission", rs)
+            mf = data.get("mentor_feedback", mf)
+        # Case 3: Pydantic model input
+        elif isinstance(data, BaseModel):
+            pc = getattr(data, "progress_consistency", pc)
+            tc = getattr(data, "task_completion", tc)
+            rs = getattr(data, "report_submission", rs)
+            mf = getattr(data, "mentor_feedback", mf)
+        # Case 4: Positional argument
+        elif data is not None and not isinstance(data, (dict, BaseModel)):
+            pc = data
+
         factors = {
-            "progress_consistency": progress_consistency,
-            "task_completion": task_completion,
-            "report_submission": report_submission,
-            "mentor_feedback": mentor_feedback,
+            "progress_consistency": pc,
+            "task_completion": tc,
+            "report_submission": rs,
+            "mentor_feedback": mf,
         }
+
+        # Validate each factor
         for name, val in factors.items():
-            if val is None or isinstance(val, bool) or not isinstance(val, (int, float)):
-                raise TypeError(
-                    f"'{name}' must be a numeric value (int or float). Got: {type(val).__name__}"
+            if val is None:
+                raise ProgressValidationError(
+                    f"Metric '{name}' must be a numeric value (int or float), not None."
                 )
+            if isinstance(val, bool):
+                raise ProgressValidationError(
+                    f"Metric '{name}' must be a numeric value (int or float), not boolean."
+                )
+            if not isinstance(val, (int, float)):
+                raise ProgressValidationError(
+                    f"Metric '{name}' must be a numeric value (int or float). Got: {type(val).__name__}"
+                )
+            if math.isnan(val) or math.isinf(val):
+                raise ProgressValidationError(f"Metric '{name}' must be a finite number.")
             if val < 0 or val > 100:
-                raise ValueError(
-                    f"'{name}' must be between 0 and 100 inclusive. Received: {val}"
+                raise ProgressValidationError(
+                    f"Metric '{name}' must be between 0 and 100 inclusive. Received: {val}"
                 )
+
+        return factors
 
     @classmethod
     def evaluate(
         cls,
-        progress_consistency: Union[int, float],
-        task_completion: Union[int, float],
-        report_submission: Union[int, float],
-        mentor_feedback: Union[int, float],
+        data: Optional[Union[Dict[str, Any], BaseModel, int, float]] = None,
+        task_completion: Optional[Union[int, float]] = None,
+        report_submission: Optional[Union[int, float]] = None,
+        mentor_feedback: Optional[Union[int, float]] = None,
+        *,
+        progress_consistency: Optional[Union[int, float]] = None,
+        **kwargs: Any,
     ) -> ProgressAttentionEngineResult:
         """
         Evaluates progress metrics and returns an explainable attention result.
+        Accepts structured data (dict / Pydantic model) or direct arguments.
         """
-        cls.validate_inputs(
-            progress_consistency=progress_consistency,
+        metrics = cls.validate_and_extract(
+            data=data,
             task_completion=task_completion,
             report_submission=report_submission,
             mentor_feedback=mentor_feedback,
+            progress_consistency=progress_consistency,
+            **kwargs,
         )
+
+        pc = metrics["progress_consistency"]
+        tc = metrics["task_completion"]
+        rs = metrics["report_submission"]
+        mf = metrics["mentor_feedback"]
 
         # Calculate overall weighted score
         raw_score = (
-            (progress_consistency * cls.WEIGHT_PROGRESS_CONSISTENCY)
-            + (task_completion * cls.WEIGHT_TASK_COMPLETION)
-            + (report_submission * cls.WEIGHT_REPORT_SUBMISSION)
-            + (mentor_feedback * cls.WEIGHT_MENTOR_FEEDBACK)
+            (pc * cls.WEIGHT_PROGRESS_CONSISTENCY)
+            + (tc * cls.WEIGHT_TASK_COMPLETION)
+            + (rs * cls.WEIGHT_REPORT_SUBMISSION)
+            + (mf * cls.WEIGHT_MENTOR_FEEDBACK)
         )
         calc_score = round(raw_score, 2)
         score: Union[int, float] = int(calc_score) if calc_score.is_integer() else calc_score
@@ -303,66 +381,77 @@ class ProgressAttentionEngine:
         reasons: List[str] = []
         recommendations: List[str] = []
 
-        # Explainable reasons & recommendations:
-        # Progress consistency
-        if progress_consistency >= cls.BENCHMARK_THRESHOLD:
-            reasons.append("Progress is consistent.")
-        else:
-            reasons.append("Progress consistency is below the expected level.")
-            recommendations.append("Maintain regular progress updates.")
-
-        # Task completion
-        if task_completion < cls.BENCHMARK_THRESHOLD:
+        # Explainable reasons & recommendations for low factors:
+        # 1. Task completion
+        if tc < cls.BENCHMARK_THRESHOLD:
             reasons.append("Task completion is below the expected level.")
             recommendations.append("Complete pending tasks.")
 
-        # Weekly reports
-        if report_submission < cls.BENCHMARK_THRESHOLD:
-            reasons.append("Weekly reports are missing.")
+        # 2. Weekly reports
+        if rs < cls.BENCHMARK_THRESHOLD:
+            reasons.append("Weekly reports are pending.")
             recommendations.append("Submit pending weekly reports.")
 
-        # Mentor feedback
-        if mentor_feedback < cls.BENCHMARK_THRESHOLD:
+        # 3. Mentor feedback
+        if mf < cls.BENCHMARK_THRESHOLD:
             reasons.append("Mentor feedback is pending.")
             recommendations.append("Request mentor feedback.")
 
-        # If on track and no issues exist, provide positive maintenance recommendation
-        if status == AttentionStatus.ON_TRACK.value and not recommendations:
+        # 4. Progress consistency
+        if pc < cls.BENCHMARK_THRESHOLD:
+            reasons.append("Progress updates are inconsistent.")
             recommendations.append("Maintain regular progress updates.")
+
+        # If all factors meet or exceed benchmark (no low factors flagged)
+        if not reasons:
+            reasons.append("Progress is consistent.")
+            recommendations.append("Maintain regular progress updates.")
+
+        # Ensure reasons and recommendations are strictly deduplicated
+        clean_reasons = _deduplicate(reasons)
+        clean_recommendations = _deduplicate(recommendations)
 
         return ProgressAttentionEngineResult(
             score=score,
             status=status,
-            reasons=reasons,
-            recommendations=recommendations,
+            reasons=clean_reasons,
+            recommendations=clean_recommendations,
         )
 
 
 def evaluate_progress_attention(
-    progress_consistency: Union[int, float],
-    task_completion: Union[int, float],
-    report_submission: Union[int, float],
-    mentor_feedback: Union[int, float],
+    data: Optional[Union[Dict[str, Any], BaseModel, int, float]] = None,
+    task_completion: Optional[Union[int, float]] = None,
+    report_submission: Optional[Union[int, float]] = None,
+    mentor_feedback: Optional[Union[int, float]] = None,
+    *,
+    progress_consistency: Optional[Union[int, float]] = None,
+    **kwargs: Any,
 ) -> ProgressAttentionEngineResult:
     """
     Convenience function invoking ProgressAttentionEngine.evaluate.
 
-    Parameters:
-        progress_consistency: Metric from 0 to 100 (30% weight)
-        task_completion: Metric from 0 to 100 (30% weight)
-        report_submission: Metric from 0 to 100 (20% weight)
-        mentor_feedback: Metric from 0 to 100 (20% weight)
+    Supports structured dictionary input:
+        evaluate_progress_attention({
+            "progress_consistency": 80,
+            "task_completion": 70,
+            "report_submission": 100,
+            "mentor_feedback": 50
+        })
 
-    Returns:
-        ProgressAttentionEngineResult with score, status, reasons, and recommendations.
+    Or individual parameters:
+        evaluate_progress_attention(80, 70, 100, 50)
     """
     return ProgressAttentionEngine.evaluate(
-        progress_consistency=progress_consistency,
+        data=data,
         task_completion=task_completion,
         report_submission=report_submission,
         mentor_feedback=mentor_feedback,
+        progress_consistency=progress_consistency,
+        **kwargs,
     )
 
 
 calculate_progress_attention = evaluate_progress_attention
+
 
