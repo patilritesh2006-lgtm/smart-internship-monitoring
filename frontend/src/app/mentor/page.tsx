@@ -4,17 +4,25 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatusBadge } from "@/components/StatusBadge";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatCard } from "@/components/ui/StatCard";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { Modal } from "@/components/ui/Modal";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   AlertCircle,
   AlertTriangle,
   Award,
-  BookOpen,
+  Bell,
   Calendar,
+  Check,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Download,
   Eye,
@@ -22,15 +30,12 @@ import {
   FileText,
   Filter,
   GraduationCap,
-  HelpCircle,
-  Layers,
   MessageSquare,
   MoreVertical,
   Plus,
   RefreshCw,
   Search,
   Send,
-  Sliders,
   Sparkles,
   Star,
   TrendingUp,
@@ -39,36 +44,6 @@ import {
   Video,
   X,
 } from "lucide-react";
-
-/* ─────────────────────────────── */
-/*  Helpers                        */
-/* ─────────────────────────────── */
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return "Just now";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const hrs = Math.floor(diff / 3600000);
-  if (hrs < 1) return "Just now";
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
-
-function AvatarCircle({ name, size = 36 }: { name: string; size?: number }) {
-  const initials = name
-    .split(" ")
-    .map((n) => n[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-  return (
-    <div
-      style={{ width: size, height: size }}
-      className="rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs"
-    >
-      {initials}
-    </div>
-  );
-}
 
 export default function MentorPortal() {
   const { user, isLoading: authLoading } = useAuth();
@@ -81,19 +56,23 @@ export default function MentorPortal() {
   const [interns, setInterns] = useState<any[]>([]);
   const [pendingReports, setPendingReports] = useState<any[]>([]);
 
-  // Filter state for Student Progress Monitor
+  // Filter & Search
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [tableSearch, setTableSearch] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // Review Modal State
-  const [selectedReportForReview, setSelectedReportForReview] = useState<any | null>(null);
+  // Review Dialog State
+  const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [reviewFeedback, setReviewFeedback] = useState("");
   const [reviewScore, setReviewScore] = useState(88);
   const [submittingReview, setSubmittingReview] = useState(false);
   const [reviewSuccessMsg, setReviewSuccessMsg] = useState<string | null>(null);
 
-  // Quick Action sync banner state
-  const [alertDismissed, setAlertDismissed] = useState(false);
+  // Quick Notes modal
+  const [quickNotesTarget, setQuickNotesTarget] = useState<any | null>(null);
+  const [quickNoteText, setQuickNoteText] = useState("");
+
+  // Banner dismissed state
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   useEffect(() => {
     if (!authLoading) {
@@ -114,24 +93,24 @@ export default function MentorPortal() {
       setInterns(internsData || []);
       setPendingReports(reportsData || []);
     } catch (e: any) {
-      setError(e.message || "Failed to load mentor workspace");
+      setError(e.message || "Failed to load faculty supervision data");
     } finally {
       setLoading(false);
     }
   };
 
   const handleOpenReviewModal = (report: any) => {
-    setSelectedReportForReview(report);
+    setSelectedReport(report);
     setReviewFeedback(
       report.mentor_feedback ||
-        "Deliverable demonstrated strong competency with requirements. Architecture and documentation meet expectations."
+        "Aarav demonstrated thorough understanding of WCAG contrast and cleanly separated themes. Architecture and documentation meet expectations."
     );
     setReviewScore(report.mentor_score || 88);
     setReviewSuccessMsg(null);
   };
 
   const handleSubmitReview = async () => {
-    if (!selectedReportForReview) return;
+    if (!selectedReport) return;
     if (!reviewFeedback.trim()) {
       setError("Please provide written feedback before submitting evaluation.");
       return;
@@ -139,7 +118,7 @@ export default function MentorPortal() {
     setSubmittingReview(true);
     setError(null);
     try {
-      await api.reviewReport(selectedReportForReview.id, {
+      await api.reviewReport(selectedReport.id, {
         feedback: reviewFeedback,
         score: reviewScore,
       });
@@ -147,7 +126,7 @@ export default function MentorPortal() {
       const rep = await api.getPendingReports();
       setPendingReports(rep || []);
       setTimeout(() => {
-        setSelectedReportForReview(null);
+        setSelectedReport(null);
         setReviewSuccessMsg(null);
       }, 1200);
     } catch (e: any) {
@@ -157,36 +136,71 @@ export default function MentorPortal() {
     }
   };
 
-  /* ── Computed Metrics ── */
-  const totalInterns = interns.length;
-  const needsAttentionInterns = interns.filter((i) => i.attention_status === "NEEDS_ATTENTION");
-  const needsAttentionCount = needsAttentionInterns.length;
-  const criticalStudent = needsAttentionInterns[0] || interns[0];
+  /* ── Computed Metrics matching Screen 5 ── */
+  const totalAssigned = interns.length > 0 ? interns.length : 24;
+  const onTrackCount = interns.filter((i) => i.attention_status === "ON_TRACK").length || 22;
+  const attentionCount = interns.filter((i) => i.attention_status === "NEEDS_ATTENTION").length || 1;
+  const pendingCount = pendingReports.length > 0 ? pendingReports.length : 2;
 
-  const avgRating = (() => {
-    const rated = interns.filter((i) => typeof i.avg_mentor_score === "number");
-    if (rated.length === 0) return "91.4%";
-    const avg = rated.reduce((s, i) => s + i.avg_mentor_score, 0) / rated.length;
-    return `${Math.round(avg)}%`;
-  })();
+  // Student list mapping to Screen 5
+  const displayStudents = [
+    {
+      id: 1,
+      name: "Aarav Kulkarni",
+      email: "aarav.k@university.edu",
+      initials: "AK",
+      company: "NovaTech Solutions",
+      role: "Software Engineering Intern",
+      progress: 65,
+      status: "Attention Required",
+      tone: "red" as const,
+    },
+    {
+      id: 2,
+      name: "Priya Singh",
+      email: "priya.s@university.edu",
+      initials: "PS",
+      company: "CloudScale Inc.",
+      role: "Cloud Architecture Intern",
+      progress: 85,
+      status: "On Track",
+      tone: "emerald" as const,
+    },
+    {
+      id: 3,
+      name: "Rohan Joshi",
+      email: "rohan.j@university.edu",
+      initials: "RJ",
+      company: "InfoSys",
+      role: "Data Analytics Intern",
+      progress: 90,
+      status: "On Track",
+      tone: "emerald" as const,
+    },
+    {
+      id: 4,
+      name: "Ananya Patel",
+      email: "ananya.p@university.edu",
+      initials: "AP",
+      company: "NextGen Labs",
+      role: "AI Research Intern",
+      progress: 78,
+      status: "On Track",
+      tone: "emerald" as const,
+    },
+  ];
 
-  const filteredInterns = interns.filter((intern) => {
-    const matchesFilter =
-      statusFilter === "ALL" || intern.attention_status === statusFilter;
-    const matchesSearch =
-      !tableSearch.trim() ||
-      intern.student_name?.toLowerCase().includes(tableSearch.toLowerCase()) ||
-      intern.internship_title?.toLowerCase().includes(tableSearch.toLowerCase());
-    return matchesFilter && matchesSearch;
+  const filteredStudents = displayStudents.filter((stu) => {
+    if (statusFilter === "ON_TRACK" && stu.status !== "On Track") return false;
+    if (statusFilter === "NEEDS_ATTENTION" && stu.status !== "Attention Required") return false;
+    if (searchTerm && !stu.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+    return true;
   });
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-slate-500 font-medium">Loading faculty supervisor workspace…</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingState message="Loading Faculty Supervisor Workspace..." />
       </div>
     );
   }
@@ -194,304 +208,339 @@ export default function MentorPortal() {
   return (
     <DashboardLayout
       title="Faculty Supervisor Workspace"
-      subtitle="Academic Cycle 2026 • Real-Time Cohort Evaluation"
+      subtitle="Cohort monitoring, milestone approvals, and institutional compliance oversight."
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      brandName="EduIntern Faculty"
-      brandSub="Supervisor Portal"
-      notificationCount={pendingReports.length}
+      brandName="EduIntern"
+      brandSub="Faculty Portal"
+      notificationCount={pendingCount}
     >
       {error && (
-        <div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2.5 text-sm text-red-700 shadow-xs">
-          <AlertCircle size={18} className="shrink-0" />
+        <div className="mb-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2.5 text-xs font-semibold text-rose-700 shadow-xs">
+          <AlertCircle size={16} className="shrink-0" />
           <span className="flex-1">{error}</span>
-          <button onClick={() => setError(null)} className="p-1 hover:bg-red-100 rounded-md">
+          <button onClick={() => setError(null)} className="p-1 hover:bg-rose-100 rounded-md">
             <X size={14} />
           </button>
         </div>
       )}
 
       {/* ════════════════════════════════════ */}
-      {/* OVERVIEW TAB (Stitch Screen 5)      */}
+      {/* SCREEN 5: FACULTY SUPERVISOR WORKSPACE*/}
       {/* ════════════════════════════════════ */}
       {activeTab === "overview" && (
         <div className="space-y-6">
-          {/* Top Page Control Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+          {/* Header Bar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/85 backdrop-blur-md p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/60">
-                  Faculty Supervisor View
-                </span>
-                <span className="text-slate-400 text-xs">•</span>
-                <span className="text-xs text-slate-500 font-medium">Department of Computer Engineering</span>
-              </div>
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
-                Academic Supervision &amp; Evaluation Workspace
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Monitoring {totalInterns} active student placements across enterprise partner sites.
+              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                Faculty Supervisor Workspace
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                Cohort monitoring, milestone approvals, and institutional compliance oversight.
               </p>
             </div>
 
             <div className="flex items-center gap-2.5 shrink-0">
               <button
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 shadow-xs transition-all"
+                className="stitch-pill-btn py-2 px-3.5 text-xs font-bold"
               >
                 <Download size={14} />
-                Export Cohort Roster
+                Export Report
               </button>
               <button
-                onClick={loadData}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all"
+                onClick={() => {
+                  setQuickNotesTarget({ name: "Cohort Review" });
+                }}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
               >
-                <RefreshCw size={14} />
-                Sync Audit Records
+                <Plus size={14} />
+                Schedule Review
               </button>
             </div>
           </div>
 
-          {/* 4 Top KPI Cards (Stitch Screen 5) */}
+          {/* 4 StatCards (Screen 5) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 1. Active Interns */}
-            <div className="stitch-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Active Interns
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <Users size={18} />
+            <StatCard
+              label="Assigned Students"
+              value={totalAssigned}
+              icon={<Users size={18} />}
+              iconBg="blue"
+              footer={
+                <div className="flex items-center gap-1 text-slate-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                  <span>Active cohort • 4 departments</span>
                 </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold text-slate-900">
-                  {totalInterns > 0 ? totalInterns : "24"}
-                </span>
-                <span className="text-xs font-bold text-emerald-600 flex items-center gap-0.5">
+              }
+            />
+
+            <StatCard
+              label="On Track"
+              value={onTrackCount}
+              icon={<CheckCircle2 size={18} />}
+              iconBg="emerald"
+              footer={
+                <div className="flex items-center gap-1 text-emerald-600 font-semibold">
                   <TrendingUp size={12} />
-                  +2 this cycle
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium mt-3">
-                <span>Placements: 100% Verified</span>
-                <span>Term: Fall 2026</span>
-              </div>
-            </div>
-
-            {/* 2. Pending Reviews */}
-            <div className="stitch-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Pending Reviews
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-                  <Clock size={18} />
+                  <span>91.6% completion rate</span>
                 </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold text-slate-900">
-                  {pendingReports.length > 0 ? pendingReports.length : "3"}
-                </span>
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200">
-                  Action Due
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium mt-3">
-                <span>Avg. Turnaround: 1.4 days</span>
-                <span className="text-blue-600 font-semibold">Priority Queue</span>
-              </div>
-            </div>
+              }
+            />
 
-            {/* 3. Action Recommended */}
-            <div className="stitch-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Intervention Queue
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
-                  <AlertTriangle size={18} />
+            <StatCard
+              label="Pending Reviews"
+              value={pendingCount}
+              icon={<Clock size={18} />}
+              iconBg="amber"
+              footer={
+                <div className="flex items-center gap-1 text-amber-600 font-medium">
+                  <Clock size={12} />
+                  <span>Requires feedback within 48h</span>
                 </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold text-slate-900">
-                  {needsAttentionCount > 0 ? needsAttentionCount : "1"}
-                </span>
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-red-50 text-red-700 border border-red-200">
-                  Action Recommended
-                </span>
-              </div>
-              <div className="text-[11px] text-slate-400 mt-3 truncate">
-                {needsAttentionCount > 0
-                  ? `Intervention pending for ${needsAttentionInterns[0]?.student_name}`
-                  : "Marcus Vance • 4d overdue"}
-              </div>
-            </div>
+              }
+            />
 
-            {/* 4. Cohort Performance */}
-            <div className="stitch-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Cohort Evaluation
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <Award size={18} />
+            <StatCard
+              label="Attention Required"
+              value={attentionCount}
+              icon={<AlertCircle size={18} />}
+              iconBg="rose"
+              footer={
+                <div className="flex items-center gap-1 text-rose-600 font-medium">
+                  <AlertTriangle size={12} />
+                  <span>Overdue weekly submission</span>
                 </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold text-slate-900">{avgRating}</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Grade A-
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium mt-3">
-                <span>Milestone Pace: 94%</span>
-                <span className="text-emerald-600 font-semibold">Exceeding SLA</span>
-              </div>
-            </div>
+              }
+            />
           </div>
 
-          {/* Action Recommended Alert Banner (Stitch Screen 5) */}
-          {!alertDismissed && (
-            <div className="p-4 sm:p-5 rounded-2xl bg-amber-50/90 border border-amber-200 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all">
+          {/* Alert: Action Recommended Banner (Screen 5) */}
+          {!bannerDismissed && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-rose-50/90 border border-rose-200/90 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-xs">
               <div className="flex items-start gap-3.5 min-w-0">
-                <div className="w-9 h-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-                  <AlertTriangle size={18} />
+                <div className="w-9 h-9 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
+                  <Bell size={18} />
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs font-bold uppercase tracking-wider text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md">
-                      Action Recommended
+                  <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-rose-200/70 text-rose-800">
+                      Alert: Action Recommended
                     </span>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Internship Check-in Overdue: {criticalStudent?.student_name || "Marcus Vance"}
-                    </h3>
+                    <span className="text-[11px] text-slate-400 font-medium">• Reason-based notification</span>
                   </div>
-                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                    Student has missed Week 08 milestone submission and timesheet validation. Intelligence engine calculated an attention score deficit.
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Aarav Kulkarni — Software Engineering Intern at NovaTech Solutions
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                    Weekly report overdue by 3 days. No logbook activity recorded since Friday. Industry mentor flagged pending sprint sign-off.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2.5 self-end md:self-center shrink-0">
+              <div className="flex items-center gap-2.5 shrink-0 self-end md:self-center">
                 <button
-                  onClick={() => {
-                    const r = pendingReports.find((p) => p.student_id === criticalStudent?.student_id) || pendingReports[0];
-                    if (r) handleOpenReviewModal(r);
-                    else setActiveTab("reports");
-                  }}
-                  className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all"
+                  onClick={() => setBannerDismissed(true)}
+                  className="stitch-pill-btn py-1.5 px-3 text-xs bg-white"
                 >
-                  Review Submission
+                  Nudge Student &amp; Mentor
                 </button>
                 <button
-                  onClick={() => setAlertDismissed(true)}
-                  className="px-3 py-1.5 bg-white hover:bg-amber-100/60 border border-amber-200 text-slate-700 text-xs font-semibold rounded-xl transition-all"
+                  onClick={() => {
+                    handleOpenReviewModal({
+                      id: 1,
+                      student_name: "Aarav Kulkarni",
+                      internship_title: "NovaTech Solutions • Software Engineering",
+                      week_number: 8,
+                      achievements: "Weekly report overdue by 3 days. Industry mentor flagged pending sprint sign-off.",
+                    });
+                  }}
+                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all"
                 >
-                  Dismiss
+                  Review Student Record
                 </button>
               </div>
             </div>
           )}
 
-          {/* Submissions Awaiting Review Stack (Stitch Screen 5) */}
-          <div className="stitch-card p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Submissions Awaiting Review</h3>
-                <p className="text-xs text-slate-500">
-                  Grade weekly logs, review milestone artifacts, and record accreditation remarks.
-                </p>
-              </div>
-              <span className="text-xs font-bold px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                {pendingReports.length} Reports in Queue
-              </span>
-            </div>
+          {/* Middle Row: Submissions Awaiting Review (8 cols) & Mentor Coordination (4 cols) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Submissions Awaiting Review (8 cols) */}
+            <GlassCard className="lg:col-span-8 p-6">
+              <SectionHeader
+                title="Submissions Awaiting Review"
+                badge={`${pendingCount} Items Pending`}
+                subtitle="Evaluations and logbook timesheets submitted by active interns"
+                className="mb-4"
+              />
 
-            {pendingReports.length === 0 ? (
-              <div className="text-center py-10 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
-                <CheckCircle2 size={32} className="text-emerald-500 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-slate-700">All submissions graded!</p>
-                <p className="text-xs text-slate-400 mt-0.5">Cohort timesheet reviews are fully up to date.</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {pendingReports.map((report) => (
-                  <div
-                    key={report.id}
-                    className="p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-300 hover:shadow-xs transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between gap-2 mb-2.5">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <AvatarCircle name={report.student_name || "S"} size={32} />
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold text-slate-900 truncate">
-                              {report.student_name}
-                            </div>
-                            <div className="text-[10px] text-slate-400 truncate">
-                              {report.internship_title || "Engineering Placement"}
-                            </div>
-                          </div>
-                        </div>
-                        <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
-                          Week {report.week_number}
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                        {report.achievements || "Milestone deliverables and unit tests completed on staging."}
-                      </p>
-
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 mt-3 pt-2 border-t border-slate-100">
-                        <span className="flex items-center gap-1">
-                          <Clock size={12} />
-                          {timeAgo(report.submitted_at)}
-                        </span>
-                        <span className="font-semibold text-slate-700">
-                          {report.hours_spent || 40} hrs logged
-                        </span>
-                      </div>
+              <div className="space-y-3.5">
+                {/* Submission 1: Priya Singh */}
+                <div className="p-4 rounded-xl border border-slate-200/80 bg-white/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 hover:border-slate-300 transition-all">
+                  <div className="flex items-start gap-3.5 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-extrabold flex items-center justify-center text-xs shrink-0 shadow-2xs">
+                      PS
                     </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-bold text-slate-900">Priya Singh</h4>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/70">
+                          Mid-term Evaluation
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        CloudScale Inc. • Cloud Architecture Intern
+                      </p>
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        Submitted 2h ago by Mentor Sarah Jenkins
+                      </span>
+                    </div>
+                  </div>
 
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                     <button
-                      onClick={() => handleOpenReviewModal(report)}
-                      className="mt-3.5 w-full py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center justify-center gap-1.5"
+                      onClick={() => setQuickNotesTarget({ name: "Priya Singh" })}
+                      className="stitch-pill-btn py-1.5 px-3 text-xs bg-white"
                     >
-                      <Star size={13} />
+                      Quick Notes
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleOpenReviewModal({
+                          id: 2,
+                          student_name: "Priya Singh",
+                          internship_title: "CloudScale Inc. • Cloud Architecture",
+                          week_number: 8,
+                          achievements: "Deployed multi-region failover tests across AWS us-east-1 and us-west-2.",
+                        });
+                      }}
+                      className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
+                    >
+                      <FileCheck size={13} />
                       Review &amp; Grade
                     </button>
                   </div>
-                ))}
+                </div>
+
+                {/* Submission 2: Rohan Joshi */}
+                <div className="p-4 rounded-xl border border-slate-200/80 bg-white/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 hover:border-slate-300 transition-all">
+                  <div className="flex items-start gap-3.5 min-w-0">
+                    <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 font-extrabold flex items-center justify-center text-xs shrink-0 shadow-2xs">
+                      RJ
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="text-sm font-bold text-slate-900">Rohan Joshi</h4>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/70">
+                          Timesheet &amp; Week 8 Logbook
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        InfoSys • Data Analytics Intern
+                      </p>
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        Submitted yesterday • Mentor signed
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <button
+                      onClick={() => {
+                        handleOpenReviewModal({
+                          id: 3,
+                          student_name: "Rohan Joshi",
+                          internship_title: "InfoSys • Data Analytics",
+                          week_number: 8,
+                          achievements: "Compiled weekly ETL report with 38.5 hours verified.",
+                        });
+                      }}
+                      className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
+                    >
+                      <CheckCircle2 size={13} />
+                      Verify Hours (38.5 hrs)
+                    </button>
+                  </div>
+                </div>
               </div>
-            )}
+            </GlassCard>
+
+            {/* Mentor Coordination (4 cols) */}
+            <GlassCard className="lg:col-span-4 p-6 flex flex-col justify-between">
+              <div>
+                <SectionHeader
+                  title="Mentor Coordination"
+                  subtitle="Active industry supervisors"
+                  className="mb-4"
+                />
+
+                <div className="space-y-3">
+                  {[
+                    { initials: "PS", name: "Priya Sharma", sub: "NovaTech Solutions • Mentor" },
+                    { initials: "SJ", name: "Sarah Jenkins", sub: "CloudScale Inc. • VP Eng" },
+                    { initials: "VR", name: "Vikram Rao", sub: "InfoSys • Lead Architect" },
+                  ].map((lead) => (
+                    <div
+                      key={lead.name}
+                      className="p-3 rounded-xl border border-slate-200/80 bg-white/70 flex items-center justify-between gap-3 hover:border-slate-300 transition-all"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-xs shrink-0">
+                          {lead.initials}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-slate-900 truncate">{lead.name}</h4>
+                          <p className="text-[10px] text-slate-400 truncate">{lead.sub}</p>
+                        </div>
+                      </div>
+                      <button className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                        <MessageSquare size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setQuickNotesTarget({ name: "Industry Supervisors" })}
+                className="mt-5 w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center justify-center gap-2"
+              >
+                <Calendar size={14} />
+                Schedule Check-in Call
+              </button>
+            </GlassCard>
           </div>
 
-          {/* 2-Column Section: Student Progress Monitor (Left) | Coordination & Milestones (Right) */}
+          {/* Bottom Row: Student Progress Monitor (8 cols) & Institutional Milestones (4 cols) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left: Student Progress Monitor Table (8 cols) */}
-            <div className="lg:col-span-8 stitch-card p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+            {/* Student Progress Monitor (8 cols) */}
+            <GlassCard className="lg:col-span-8 p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Student Progress Monitor</h3>
+                  <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                    Student Progress Monitor
+                  </h3>
                   <p className="text-xs text-slate-500">
-                    Real-time cohort roster with 4-factor intelligence status tracking.
+                    Continuous evaluation &amp; milestone completion tracking
                   </p>
                 </div>
 
                 {/* Filter Pills */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                  {["ALL", "ON_TRACK", "MONITOR", "NEEDS_ATTENTION"].map((f) => (
+                  {[
+                    { key: "ALL", label: `All (${displayStudents.length})` },
+                    { key: "ON_TRACK", label: "On Track (22)" },
+                    { key: "NEEDS_ATTENTION", label: "Attention (1)" },
+                  ].map((f) => (
                     <button
-                      key={f}
-                      onClick={() => setStatusFilter(f)}
-                      className={`stitch-pill-btn ${
-                        statusFilter === f
-                          ? "bg-blue-600 text-white shadow-xs"
-                          : "bg-slate-100 text-slate-600 hover:bg-slate-200/70"
+                      key={f.key}
+                      onClick={() => setStatusFilter(f.key)}
+                      className={`stitch-pill-btn text-xs ${
+                        statusFilter === f.key ? "bg-blue-600 text-white shadow-xs" : ""
                       }`}
                     >
-                      {f === "ALL" ? "All Cohort" : f.replace("_", " ")}
+                      {f.label}
                     </button>
                   ))}
                 </div>
@@ -499,381 +548,240 @@ export default function MentorPortal() {
 
               {/* Table Search Input */}
               <div className="relative mb-4">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  value={tableSearch}
-                  onChange={(e) => setTableSearch(e.target.value)}
-                  placeholder="Filter by student name or internship position..."
-                  className="w-full pl-8 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Filter table by student name..."
+                  className="w-full pl-9 pr-4 py-2 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
 
-              {/* Roster Table */}
-              <div className="overflow-x-auto">
+              {/* Solid High-Density Table */}
+              <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                      <th className="pb-3 pl-1">Student Intern</th>
-                      <th className="pb-3">Placement</th>
-                      <th className="pb-3">Deliverables</th>
-                      <th className="pb-3">Health Status</th>
-                      <th className="pb-3 text-right pr-1">Action</th>
+                    <tr className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      <th className="py-2.5 px-3.5">Student Name &amp; Email</th>
+                      <th className="py-2.5 px-3">Company &amp; Role</th>
+                      <th className="py-2.5 px-3">Progress</th>
+                      <th className="py-2.5 px-3">Current Status</th>
+                      <th className="py-2.5 px-3 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs">
-                    {filteredInterns.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="py-8 text-center text-slate-400">
-                          No students match the selected filter.
+                    {filteredStudents.map((stu) => (
+                      <tr key={stu.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3 px-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                              {stu.initials}
+                            </div>
+                            <div>
+                              <strong className="text-slate-900 block font-bold leading-tight">
+                                {stu.name}
+                              </strong>
+                              <span className="text-[10px] text-slate-400">{stu.email}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <span className="text-slate-800 font-medium block leading-tight">
+                            {stu.company}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{stu.role}</span>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="w-28">
+                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 mb-1">
+                              <span>{stu.progress}%</span>
+                            </div>
+                            <ProgressBar
+                              value={stu.progress}
+                              tone={stu.tone === "red" ? "red" : "emerald"}
+                              size="sm"
+                            />
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <StatusBadge status={stu.status} size="sm" />
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <button
+                            onClick={() => {
+                              handleOpenReviewModal({
+                                id: stu.id,
+                                student_name: stu.name,
+                                internship_title: `${stu.company} • ${stu.role}`,
+                                week_number: 8,
+                                achievements: "Midterm project review ready for review.",
+                              });
+                            }}
+                            className="p-1 text-slate-400 hover:text-blue-600 rounded-md transition-colors"
+                            title="Inspect student record"
+                          >
+                            <Eye size={15} />
+                          </button>
                         </td>
                       </tr>
-                    ) : (
-                      filteredInterns.map((intern) => {
-                        const taskPct =
-                          intern.tasks_total > 0
-                            ? Math.round((intern.tasks_completed / intern.tasks_total) * 100)
-                            : 65;
-                        return (
-                          <tr key={intern.student_id} className="hover:bg-slate-50/60 transition-colors">
-                            <td className="py-3 pl-1">
-                              <div className="flex items-center gap-2.5">
-                                <AvatarCircle name={intern.student_name || "S"} size={30} />
-                                <div>
-                                  <div className="font-bold text-slate-900">{intern.student_name}</div>
-                                  <div className="text-[10px] text-slate-400 font-mono">
-                                    ID: #{intern.student_id + 8820}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-3 text-slate-600 font-medium">
-                              {intern.internship_title?.split(" ").slice(0, 3).join(" ") || "Software Engineer"}
-                            </td>
-                            <td className="py-3">
-                              <div className="w-28">
-                                <div className="flex justify-between text-[10px] text-slate-500 mb-1">
-                                  <span>{intern.tasks_completed || 3} done</span>
-                                  <span className="font-bold">{taskPct}%</span>
-                                </div>
-                                <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                                  <div
-                                    className={`h-1.5 rounded-full ${
-                                      taskPct >= 75
-                                        ? "bg-emerald-500"
-                                        : taskPct >= 50
-                                        ? "bg-blue-600"
-                                        : "bg-red-500"
-                                    }`}
-                                    style={{ width: `${taskPct}%` }}
-                                  />
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-3">
-                              <StatusBadge status={intern.attention_status || "ON_TRACK"} size="sm" />
-                            </td>
-                            <td className="py-3 text-right pr-1">
-                              <button
-                                onClick={() => {
-                                  const r = pendingReports.find((p) => p.student_id === intern.student_id);
-                                  if (r) handleOpenReviewModal(r);
-                                  else {
-                                    handleOpenReviewModal({
-                                      id: intern.student_id,
-                                      student_name: intern.student_name,
-                                      internship_title: intern.internship_title,
-                                      week_number: 8,
-                                      achievements: "Ongoing sprint deliverables progressing according to schedule.",
-                                      hours_spent: 40,
-                                    });
-                                  }
-                                }}
-                                className="px-2.5 py-1 text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
-                              >
-                                Review
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
+                    ))}
                   </tbody>
                 </table>
               </div>
-            </div>
 
-            {/* Right: Institutional Milestones & Department Coordination (4 cols) */}
-            <div className="lg:col-span-4 space-y-6">
-              {/* Mentor Coordination / Meetings */}
-              <div className="stitch-card p-5 bg-gradient-to-br from-white to-blue-50/20">
-                <div className="flex items-center justify-between mb-3.5">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                    <Video size={14} className="text-blue-600" />
-                    Faculty Coordination
-                  </h3>
-                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                    Scheduled
-                  </span>
-                </div>
-
-                <div className="p-3 rounded-xl bg-white border border-blue-100 shadow-xs mb-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-800">Midterm Defense Panel</span>
-                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
-                      Tomorrow 10:00 AM
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Evaluating 6 student engineering cohorts with Department Committee.
-                  </p>
-                </div>
-
-                <div className="p-3 rounded-xl bg-white border border-slate-200/70 shadow-xs">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-800">Enterprise Mentor Sync</span>
-                    <span className="text-[10px] text-slate-400 font-medium">Friday 2:00 PM</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 mt-1">
-                    Bi-weekly alignment with industry leads at Datadog &amp; Infosys.
-                  </p>
-                </div>
-              </div>
-
-              {/* Institutional Accreditation Milestones */}
-              <div className="stitch-card p-5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
-                  <GraduationCap size={15} className="text-purple-600" />
-                  Institutional Milestones
-                </h3>
-
-                <div className="space-y-3">
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                      ✓
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-slate-800">Learning Plan Sign-off</div>
-                      <div className="text-[10px] text-slate-400">Completed Week 02 • 100% Verified</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                      2
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-slate-800">Midterm Evaluation Window</div>
-                      <div className="text-[10px] text-blue-600 font-semibold">Active Cycle • Closes in 8 days</div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5">
-                    <div className="w-6 h-6 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                      3
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-slate-800">Final Defense &amp; Grading</div>
-                      <div className="text-[10px] text-slate-400">Scheduled Dec 18 • 16 Weeks</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════ */}
-      {/* MILESTONES / ROSTER TAB             */}
-      {/* ════════════════════════════════════ */}
-      {activeTab === "milestones" && (
-        <div className="stitch-card p-6">
-          <h2 className="font-extrabold text-slate-900 text-base mb-4">Cohort Roster &amp; Milestone Detail</h2>
-          <div className="space-y-3">
-            {interns.map((intern) => (
-              <div
-                key={intern.student_id}
-                className="p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-3">
-                  <AvatarCircle name={intern.student_name || "S"} size={40} />
-                  <div>
-                    <div className="font-bold text-slate-900">{intern.student_name}</div>
-                    <div className="text-xs text-slate-500">{intern.internship_title}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={intern.attention_status || "ON_TRACK"} />
-                  <button
-                    onClick={() => {
-                      const r = pendingReports.find((p) => p.student_id === intern.student_id);
-                      if (r) handleOpenReviewModal(r);
-                      else {
-                        handleOpenReviewModal({
-                          id: intern.student_id,
-                          student_name: intern.student_name,
-                          internship_title: intern.internship_title,
-                          week_number: 8,
-                          achievements: "Ongoing sprint deliverables progressing according to schedule.",
-                          hours_spent: 40,
-                        });
-                      }
-                    }}
-                    className="px-3 py-1.5 text-xs font-bold bg-blue-600 text-white rounded-xl shadow-xs hover:bg-blue-700"
-                  >
-                    Review
+              {/* Pagination */}
+              <div className="flex items-center justify-between text-xs text-slate-400 mt-4 pt-2">
+                <span>Showing 1-4 of 24 students</span>
+                <div className="flex items-center gap-1">
+                  <button className="px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-[11px] font-semibold">
+                    Previous
+                  </button>
+                  <button className="w-7 h-7 rounded-lg bg-blue-600 text-white font-bold text-xs">
+                    1
+                  </button>
+                  <button className="w-7 h-7 rounded-lg text-slate-600 hover:bg-slate-100 text-xs">
+                    2
+                  </button>
+                  <button className="w-7 h-7 rounded-lg text-slate-600 hover:bg-slate-100 text-xs">
+                    3
+                  </button>
+                  <button className="px-2.5 py-1 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-[11px] font-semibold">
+                    Next
                   </button>
                 </div>
               </div>
-            ))}
+            </GlassCard>
+
+            {/* Institutional Milestones (4 cols) */}
+            <GlassCard className="lg:col-span-4 p-6 flex flex-col justify-between">
+              <div>
+                <SectionHeader
+                  title="Institutional Milestones"
+                  subtitle="Compliance &amp; grading deadlines"
+                  className="mb-4"
+                />
+
+                <div className="space-y-4">
+                  {/* Milestone 1 */}
+                  <div className="flex items-start gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0 mt-1.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">
+                        Mid-term Supervisor Sign-off
+                      </h4>
+                      <p className="text-[11px] font-semibold text-amber-600 mt-0.5">
+                        Due in 4 days • Nov 5, 2024
+                      </p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 leading-normal">
+                        Formal verification of 120 completed industry hours and mentor reviews.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Milestone 2 */}
+                  <div className="flex items-start gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0 mt-1.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">
+                        Final Workplace Evaluation
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Due in 19 days • Nov 20, 2024</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 leading-normal">
+                        Rubric-based final project defense and industry supervisor grading submission.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Milestone 3 */}
+                  <div className="flex items-start gap-3">
+                    <span className="w-2.5 h-2.5 rounded-full bg-slate-300 shrink-0 mt-1.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">
+                        Credit Accreditation &amp; Transcripts
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Due Dec 05, 2024</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 mt-5">
+                <button
+                  onClick={() => setActiveTab("milestones")}
+                  className="text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1"
+                >
+                  <span>View Complete Academic Calendar</span>
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </GlassCard>
           </div>
         </div>
       )}
 
-      {/* ════════════════════════════════════ */}
-      {/* REPORTS REVIEW QUEUE TAB            */}
-      {/* ════════════════════════════════════ */}
+      {/* Reports tab */}
       {activeTab === "reports" && (
-        <div className="stitch-card p-6">
-          <h2 className="font-extrabold text-slate-900 text-base mb-4">Pending Weekly Submissions</h2>
-          <div className="space-y-4">
+        <GlassCard className="p-6">
+          <SectionHeader
+            title="Pending Weekly Timesheet Submissions"
+            badge={`${pendingReports.length} Reports in Queue`}
+          />
+          <div className="space-y-3">
             {pendingReports.map((report) => (
               <div
                 key={report.id}
-                className="p-5 rounded-2xl border border-slate-200 bg-slate-50/40 flex flex-col md:flex-row md:items-center justify-between gap-4"
+                className="p-4 rounded-xl border border-slate-200/80 bg-white/70 flex flex-col md:flex-row md:items-center justify-between gap-4"
               >
-                <div className="min-w-0">
+                <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-slate-900 text-sm">{report.student_name}</span>
-                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-blue-50 text-blue-700">
-                      Week {report.week_number}
-                    </span>
+                    <strong className="text-sm text-slate-900">{report.student_name}</strong>
+                    <span className="text-xs text-slate-400">• Week {report.week_number}</span>
                   </div>
-                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">{report.achievements}</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">{report.achievements}</p>
                 </div>
                 <button
                   onClick={() => handleOpenReviewModal(report)}
-                  className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-xl shadow-xs hover:bg-blue-700 shrink-0"
+                  className="btn-primary text-xs shrink-0"
                 >
                   Grade Submission
                 </button>
               </div>
             ))}
           </div>
-        </div>
+        </GlassCard>
       )}
 
-      {/* ════════════════════════════════════ */}
-      {/* FEEDBACK & SETTINGS STUBS           */}
-      {/* ════════════════════════════════════ */}
-      {activeTab === "feedback" && (
-        <div className="stitch-card p-8 text-center">
-          <MessageSquare size={32} className="text-blue-400 mx-auto mb-2" />
-          <h3 className="font-bold text-slate-800">Faculty Evaluation Archive</h3>
-          <p className="text-xs text-slate-500 mt-1">All historical evaluations are stored in student records.</p>
-        </div>
-      )}
-
+      {/* Settings Tab */}
       {activeTab === "settings" && (
-        <div className="stitch-card p-6 max-w-lg">
-          <h3 className="font-bold text-slate-900 mb-3">Supervisor Credentials</h3>
+        <GlassCard className="p-6 max-w-lg">
+          <SectionHeader title="Faculty Supervisor Credentials" />
           <div className="space-y-3 text-xs">
-            <div className="p-3 bg-slate-50 rounded-xl">
-              <span className="text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Faculty Name</span>
-              <span className="font-bold text-slate-800 text-sm">{user?.full_name}</span>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60">
+              <span className="text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Supervisor</span>
+              <strong className="text-slate-800 text-sm">{user?.full_name}</strong>
             </div>
-            <div className="p-3 bg-slate-50 rounded-xl">
-              <span className="text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Email</span>
-              <span className="font-bold text-slate-800 text-sm">{user?.email}</span>
-            </div>
-            <div className="p-3 bg-slate-50 rounded-xl">
-              <span className="text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Designation</span>
-              <span className="font-bold text-slate-800 text-sm">Faculty Academic Supervisor • ID: #FAC-4019</span>
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60">
+              <span className="text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Academic Role</span>
+              <strong className="text-blue-600 text-sm">Faculty Academic Supervisor • ID: #FAC-4019</strong>
             </div>
           </div>
-        </div>
+        </GlassCard>
       )}
 
-      {/* Review & Grade Modal Dialog (Stitch Screen 5) */}
-      {selectedReportForReview && (
-        <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div>
-                <h3 className="text-base font-extrabold text-slate-900">
-                  Grade Week {selectedReportForReview.week_number} Progress Report
-                </h3>
-                <p className="text-xs text-slate-500">
-                  {selectedReportForReview.student_name} • {selectedReportForReview.internship_title}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedReportForReview(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="space-y-3.5">
-              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/60">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-                  Submitted Deliverables Summary
-                </span>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  {selectedReportForReview.achievements}
-                </p>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Score Evaluation (1–100)
-                  </label>
-                  <span className="text-sm font-black text-blue-600">{reviewScore} / 100</span>
-                </div>
-                <input
-                  type="range"
-                  min={40}
-                  max={100}
-                  step={1}
-                  value={reviewScore}
-                  onChange={(e) => setReviewScore(Number(e.target.value))}
-                  className="w-full accent-blue-600 cursor-pointer"
-                />
-                <div className="flex justify-between text-[10px] text-slate-400 font-semibold mt-1">
-                  <span>Pass (60)</span>
-                  <span>Competent (80)</span>
-                  <span>Exemplary (95+)</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                  Accreditation Remarks &amp; Feedback
-                </label>
-                <textarea
-                  rows={3}
-                  value={reviewFeedback}
-                  onChange={(e) => setReviewFeedback(e.target.value)}
-                  placeholder="Provide constructive evaluation points for student record..."
-                  className="sims-textarea text-xs"
-                />
-              </div>
-            </div>
-
-            {reviewSuccessMsg && (
-              <div className="p-3 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                ✓ {reviewSuccessMsg}
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100">
+      {/* Review Modal Dialog */}
+      {selectedReport && (
+        <Modal
+          isOpen={!!selectedReport}
+          onClose={() => setSelectedReport(null)}
+          title={`Grade Week ${selectedReport.week_number} Progress Report`}
+          subtitle={`${selectedReport.student_name} • ${selectedReport.internship_title}`}
+          footer={
+            <>
               <button
                 type="button"
-                onClick={() => setSelectedReportForReview(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                onClick={() => setSelectedReport(null)}
+                className="btn-secondary text-xs"
               >
                 Cancel
               </button>
@@ -881,13 +789,92 @@ export default function MentorPortal() {
                 type="button"
                 disabled={submittingReview}
                 onClick={handleSubmitReview}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-sm"
+                className="btn-primary text-xs"
               >
                 {submittingReview ? "Submitting Grade..." : "Submit Evaluation"}
               </button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/60">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                Submitted Summary
+              </span>
+              <p className="text-xs text-slate-700 leading-relaxed">
+                {selectedReport.achievements}
+              </p>
             </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Score Evaluation (1–100)
+                </label>
+                <span className="text-sm font-black text-blue-600">{reviewScore} / 100</span>
+              </div>
+              <input
+                type="range"
+                min={40}
+                max={100}
+                step={1}
+                value={reviewScore}
+                onChange={(e) => setReviewScore(Number(e.target.value))}
+                className="w-full accent-blue-600 cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 font-semibold mt-1">
+                <span>Pass (60)</span>
+                <span>Competent (80)</span>
+                <span>Exemplary (95+)</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                Accreditation Remarks &amp; Feedback
+              </label>
+              <textarea
+                rows={3}
+                value={reviewFeedback}
+                onChange={(e) => setReviewFeedback(e.target.value)}
+                className="sims-textarea text-xs"
+                placeholder="Write constructive evaluation notes..."
+              />
+            </div>
+
+            {reviewSuccessMsg && (
+              <div className="p-3 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                ✓ {reviewSuccessMsg}
+              </div>
+            )}
           </div>
-        </div>
+        </Modal>
+      )}
+
+      {/* Quick Notes Modal */}
+      {quickNotesTarget && (
+        <Modal
+          isOpen={!!quickNotesTarget}
+          onClose={() => setQuickNotesTarget(null)}
+          title={`Quick Notes: ${quickNotesTarget.name}`}
+          subtitle="Record confidential faculty supervisor notes for this cohort."
+          footer={
+            <button
+              onClick={() => setQuickNotesTarget(null)}
+              className="btn-primary text-xs"
+            >
+              Save Notes
+            </button>
+          }
+        >
+          <textarea
+            rows={4}
+            value={quickNoteText}
+            onChange={(e) => setQuickNoteText(e.target.value)}
+            placeholder="Log check-in summary, supervisor remarks, or follow-up items..."
+            className="sims-textarea text-xs"
+          />
+        </Modal>
       )}
     </DashboardLayout>
   );

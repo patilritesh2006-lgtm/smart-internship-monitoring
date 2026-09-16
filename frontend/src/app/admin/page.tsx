@@ -4,28 +4,39 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { StatusBadge } from "@/components/StatusBadge";
+import { GlassCard } from "@/components/ui/GlassCard";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { StatCard } from "@/components/ui/StatCard";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { Modal } from "@/components/ui/Modal";
+import { LoadingState } from "@/components/ui/LoadingState";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
   Activity,
   AlertCircle,
-  AlertOctagon,
   AlertTriangle,
+  ArrowRight,
   Award,
-  BarChart3,
+  Bell,
   Briefcase,
   Building2,
+  Calendar,
+  Check,
   CheckCircle2,
-  ChevronRight,
   Clock,
   Download,
   ExternalLink,
+  Eye,
   FileCheck,
-  FilePlus,
+  FileText,
   Filter,
+  Globe,
   GraduationCap,
-  HelpCircle,
+  Hourglass,
   Layers,
+  Mail,
   MoreVertical,
   Plus,
   RefreshCw,
@@ -34,24 +45,13 @@ import {
   Shield,
   ShieldAlert,
   ShieldCheck,
+  Sliders,
   Sparkles,
-  TrendingDown,
   TrendingUp,
   UserCheck,
   Users,
   X,
 } from "lucide-react";
-
-/* ── Helpers ── */
-function timeAgo(dateStr: string | null): string {
-  if (!dateStr) return "Just now";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
 
 export default function AdminPortal() {
   const { user, isLoading: authLoading } = useAuth();
@@ -65,11 +65,12 @@ export default function AdminPortal() {
   const [applications, setApplications] = useState<any[]>([]);
   const [mentors, setMentors] = useState<any[]>([]);
   const [selectedMentorMap, setSelectedMentorMap] = useState<Record<number, number>>({});
-  const [reviewNotesMap, setReviewNotesMap] = useState<Record<number, string>>({});
   const [processingId, setProcessingId] = useState<number | null>(null);
 
-  // Intervention Queue search
-  const [queueFilter, setQueueFilter] = useState("ALL");
+  // Filters for Intervention Queue
+  const [queueSeverity, setQueueSeverity] = useState("ALL");
+  const [queueDept, setQueueDept] = useState("ALL");
+  const [queueSearch, setQueueSearch] = useState("");
 
   // Post internship form
   const [title, setTitle] = useState("");
@@ -83,6 +84,10 @@ export default function AdminPortal() {
   const [requiredSkillsStr, setRequiredSkillsStr] = useState("Python, FastAPI, React, Docker");
   const [postingInternship, setPostingInternship] = useState(false);
   const [postMsg, setPostMsg] = useState<string | null>(null);
+
+  // Intervention modal
+  const [interventionTarget, setInterventionTarget] = useState<any | null>(null);
+  const [interventionNote, setInterventionNote] = useState("");
 
   useEffect(() => {
     if (!authLoading) {
@@ -105,7 +110,7 @@ export default function AdminPortal() {
       setApplications(apps || []);
       setMentors(ments || []);
     } catch (e: any) {
-      setError(e.message || "Failed to load institutional telemetry");
+      setError(e.message || "Failed to load institutional command data");
     } finally {
       setLoading(false);
     }
@@ -115,8 +120,11 @@ export default function AdminPortal() {
     setProcessingId(appId);
     try {
       const mentorId = selectedMentorMap[appId];
-      const notes = reviewNotesMap[appId] || "";
-      await api.reviewApplication(appId, { action, mentor_id: mentorId || null, review_notes: notes });
+      await api.reviewApplication(appId, {
+        action,
+        mentor_id: mentorId || null,
+        review_notes: "Administrative placement approval confirmed per university guidelines.",
+      });
       const apps = await api.listApplications();
       setApplications(apps || []);
     } catch (e: any) {
@@ -143,7 +151,7 @@ export default function AdminPortal() {
         duration_weeks: durationWeeks,
         required_skills: skills,
       });
-      setPostMsg(`✓ Internship "${title}" posted successfully to public directory!`);
+      setPostMsg(`✓ Internship "${title}" published successfully to institutional board!`);
       setTitle("");
       setCompanyName("");
       setDescription("");
@@ -154,83 +162,132 @@ export default function AdminPortal() {
     }
   };
 
-  /* ── Derived Stats & Mock Roster for Intervention Queue (Stitch Screen 4) ── */
-  const totalActive = analytics?.total_active_interns ?? 24;
-  const onTrackCount = analytics?.on_track_count ?? 18;
-  const monitorCount = analytics?.monitor_count ?? 4;
-  const needsAttentionCount = analytics?.needs_attention_count ?? 2;
-  const pendingApps = applications.filter((a) => a.status === "PENDING").length;
+  /* ── Screen 4 & Screen 2 Data Sets ── */
+  const activePlacements = 342;
+  const pendingAgreements = 14;
+  const actionableFlags = 3;
+  const complianceHealth = "94.8%";
 
+  // Screen 4 Intervention Items
   const interventionQueueItems = [
     {
       id: 1,
-      student_name: "Marcus Vance",
-      roll_number: "STU-8821",
-      department: "Computer Science",
-      company: "Datadog Cloud Systems",
-      issue: "Timesheet overdue by 4 days • 0 commits registered",
-      severity: "CRITICAL",
-      attention_score: 38,
-      mentor: "Prof. Sarah Jenkins",
+      name: "Jessica Davis",
+      initials: "JD",
+      roll: "ID: #STU-89214",
+      dept: "Computer Science",
+      company: "Stripe",
+      role: "Software Engineering Intern",
+      triggerTitle: "Weekly Logbook Overdue",
+      triggerDesc: "Missed Week 7 sprint retrospective & hours confirmation",
+      severity: "High",
+      delay: "6 Days",
+      delaySub: "Due Apr 12",
+      actionType: "reminder",
     },
     {
       id: 2,
-      student_name: "Elena Rostova",
-      roll_number: "STU-8829",
-      department: "Information Tech",
-      company: "Infosys AI Labs",
-      issue: "Low supervisor grade on Week 07 milestone (62/100)",
-      severity: "WARNING",
-      attention_score: 52,
-      mentor: "Dr. Arvind Patel",
+      name: "Alex Mercer",
+      initials: "AM",
+      roll: "ID: #STU-74102",
+      dept: "Electrical Eng",
+      company: "Tesla",
+      role: "Firmware Engineering Intern",
+      triggerTitle: "Mentor Evaluation Pending",
+      triggerDesc: "Mid-term competency evaluation unconfirmed by industry mentor",
+      severity: "Medium",
+      delay: "2 Days",
+      delaySub: "Due Apr 16",
+      actionType: "nudge",
     },
     {
       id: 3,
-      student_name: "David Chen",
-      roll_number: "STU-8834",
-      department: "Computer Science",
-      company: "Razorpay Payments",
-      issue: "Skill gap deficit flagged in curriculum compliance audit",
-      severity: "MODERATE",
-      attention_score: 64,
-      mentor: "Prof. Sarah Jenkins",
+      name: "Sophia Kumar",
+      initials: "SK",
+      roll: "ID: #STU-99321",
+      dept: "Business Analytics",
+      company: "Google",
+      role: "Product Management Intern",
+      triggerTitle: "Weekly Limit Discrepancy",
+      triggerDesc: "Logged 55h against standard 40h academic maximum",
+      severity: "High",
+      delay: "1 Day",
+      delaySub: "Logged Yesterday",
+      actionType: "review",
     },
   ];
 
-  const auditLogs = [
+  // Screen 2 Approval Workflow Items
+  const approvalWorkflowStudents = [
     {
-      icon: <Activity size={14} className="text-blue-600" />,
-      bg: "bg-blue-50",
-      title: "Deterministic Engine Sync",
-      sub: "Re-indexed 24 student activity streams with 0 SLA violations",
-      time: "4 mins ago",
-      verified: true,
+      id: 101,
+      name: "Alex Smith",
+      initials: "AS",
+      degree: "BSc Computer Science",
+      studentId: "ID: 88421",
+      company: "Stellar Dynamics",
+      role: "Software Engineering Intern",
+      status: "Verified",
+      supervisor: "Dr. Robert Chen",
+      complianceChecks: [true, true, true],
     },
     {
-      icon: <CheckCircle2 size={14} className="text-emerald-600" />,
+      id: 102,
+      name: "Jessica Doe",
+      initials: "JD",
+      degree: "BBA Finance",
+      studentId: "ID: 77319",
+      company: "Apex Global Partners",
+      role: "Financial Analyst Intern",
+      status: "Pending Review",
+      supervisor: "Select Supervisor",
+      complianceChecks: [true, false, true],
+    },
+    {
+      id: 103,
+      name: "Marcus King",
+      initials: "MK",
+      degree: "BSc Mechanical Eng",
+      studentId: "ID: 90214",
+      company: "Vanguard Robotics",
+      role: "R&D Systems Intern",
+      status: "Verified",
+      supervisor: "Dr. Alan Grant",
+      complianceChecks: [true, true, true],
+    },
+  ];
+
+  const auditEvents = [
+    {
+      id: 1,
+      icon: <Mail size={15} className="text-rose-600" />,
+      bg: "bg-rose-50",
+      title: "Automated compliance warning dispatched to Jessica Davis",
+      sub: "Rule #4B (Overdue Logbook > 5 calendar days) • CC: Academic Advisor",
+      time: "12m ago",
+    },
+    {
+      id: 2,
+      icon: <CheckCircle2 size={15} className="text-emerald-600" />,
       bg: "bg-emerald-50",
-      title: "Accreditation Report Published",
-      sub: "Midterm compliance summary exported for ABET board",
-      time: "42 mins ago",
-      verified: true,
+      title: "Internship agreement countersigned for Marcus Vance",
+      sub: "Verified & sealed by Dean of Internships (Dr. Helen Vance)",
+      time: "1h ago",
     },
     {
-      icon: <ShieldCheck size={14} className="text-purple-600" />,
-      bg: "bg-purple-50",
-      title: "Enterprise SSO Audit",
-      sub: "JWT authentication keys rotated and validated",
-      time: "2 hours ago",
-      verified: true,
+      id: 3,
+      icon: <Bell size={15} className="text-amber-600" />,
+      bg: "bg-amber-50",
+      title: "Automated supervisor evaluation nudge triggered",
+      sub: "Sent to Stripe Engineering Mentorship Directorate • 3 pending mid-terms",
+      time: "3h ago",
     },
   ];
 
   if (authLoading || loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-10 h-10 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-slate-500 font-medium">Loading institutional administrative center…</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingState message="Loading Administrative Command & Alerts..." />
       </div>
     );
   }
@@ -241,432 +298,552 @@ export default function AdminPortal() {
       subtitle="Institutional Governance • Real-Time Oversight • Live Academic Cycle"
       activeTab={activeTab}
       onTabChange={setActiveTab}
-      brandName="EduIntern Institutional"
+      brandName="EduIntern"
       brandSub="Command Center"
-      notificationCount={pendingApps + needsAttentionCount}
+      notificationCount={pendingAgreements + actionableFlags}
     >
       {error && (
-        <div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 flex items-center gap-2.5 text-sm text-red-700 shadow-xs">
-          <AlertCircle size={18} className="shrink-0" />
+        <div className="mb-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-2.5 text-xs font-semibold text-rose-700 shadow-xs">
+          <AlertCircle size={16} className="shrink-0" />
           <span className="flex-1">{error}</span>
-          <button onClick={() => setError(null)} className="p-1 hover:bg-red-100 rounded-md">
+          <button onClick={() => setError(null)} className="p-1 hover:bg-rose-100 rounded-md">
             <X size={14} />
           </button>
         </div>
       )}
 
       {/* ════════════════════════════════════ */}
-      {/* OVERVIEW TAB (Stitch Screen 4 & 2)  */}
+      {/* SCREEN 4: ADMINISTRATIVE OVERVIEW    */}
       {/* ════════════════════════════════════ */}
       {activeTab === "overview" && (
         <div className="space-y-6">
-          {/* Top Page Control Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs">
+          {/* Top Header Bar */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white/85 backdrop-blur-md p-5 sm:p-6 rounded-2xl border border-slate-200/80 shadow-xs">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-50 text-purple-700 border border-purple-200/60">
-                  Institutional Governance
-                </span>
-                <span className="text-slate-400 text-xs">•</span>
-                <span className="text-xs text-slate-500 font-medium">Academic Cycle 2026 Active</span>
+              <div className="flex items-center gap-2 mb-1.5 text-xs font-bold text-slate-400">
+                <span className="text-blue-600">INTERVENTION &amp; OVERSIGHT</span>
+                <span>/</span>
+                <span>Office of Experiential Learning</span>
               </div>
-              <h2 className="text-xl font-extrabold text-slate-900 tracking-tight">
+              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
                 Administrative Command &amp; Alerts
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Centralized monitoring of all student cohorts, enterprise partnerships, and accreditation compliance.
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                Live university dashboard for internship compliance, supervisor validations, and student interventions.
               </p>
             </div>
 
-            <div className="flex items-center gap-2.5 shrink-0">
+            {/* Controls */}
+            <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+              <div className="inline-flex items-center p-1 rounded-xl bg-slate-100 border border-slate-200/80 text-xs font-bold text-slate-700">
+                <span className="px-3 py-1 rounded-lg bg-white shadow-2xs text-slate-900">
+                  2026 Academic Cycle
+                </span>
+                <span className="px-2.5 py-1 text-slate-500 hover:text-slate-900 cursor-pointer">
+                  Fall 2025
+                </span>
+                <span className="px-2.5 py-1 text-slate-500 hover:text-slate-900 cursor-pointer">
+                  Archive
+                </span>
+              </div>
+
               <button
                 onClick={() => window.print()}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 shadow-xs transition-all"
+                className="stitch-pill-btn py-2 px-3 text-xs"
               >
                 <Download size={14} />
-                Export Audit Report
+                Export Audit Log
               </button>
+
               <button
-                onClick={loadData}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 shadow-sm transition-all"
+                onClick={() => setInterventionTarget({ name: "Batch Notice Broadcast" })}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
               >
-                <RefreshCw size={14} />
-                Trigger Cohort Audit
+                <Bell size={14} />
+                Batch Notice
               </button>
             </div>
           </div>
 
-          {/* 4 Top KPI Cards (Stitch Screen 4) */}
+          {/* 4 StatCards (Screen 4) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* 1. Active Placements */}
-            <div className="stitch-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Total Active Interns
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-                  <Users size={18} />
+            <StatCard
+              label="Active Placements"
+              value={activePlacements}
+              badge="+12%"
+              badgeColor="emerald"
+              icon={<Globe size={18} />}
+              iconBg="blue"
+              footer={
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Across 84 partner firms</span>
+                  <span className="text-blue-600 font-bold hover:underline cursor-pointer">Directory →</span>
                 </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold text-slate-900">{totalActive}</span>
-                <span className="text-xs font-bold text-emerald-600 flex items-center gap-0.5">
-                  <TrendingUp size={12} />
-                  +12% vs last semester
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium mt-3">
-                <span>Enterprise Sites: 14</span>
-                <span>Active Cohorts: 4</span>
-              </div>
-            </div>
+              }
+            />
 
-            {/* 2. Supervised Cohorts */}
-            <div className="stitch-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Faculty Supervisors
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-                  <GraduationCap size={18} />
+            <StatCard
+              label="Pending Agreements"
+              value={pendingAgreements}
+              badge="Requires Sign-off"
+              badgeColor="amber"
+              icon={<Hourglass size={18} />}
+              iconBg="amber"
+              footer={
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Avg sign speed: 4.2h</span>
+                  <span
+                    onClick={() => setActiveTab("milestones")}
+                    className="text-blue-600 font-bold hover:underline cursor-pointer"
+                  >
+                    Process →
+                  </span>
                 </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold text-slate-900">
-                  {mentors.length > 0 ? mentors.length : "8"}
-                </span>
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-200">
-                  100% On Schedule
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium mt-3">
-                <span>Roster Ratio: 1:3</span>
-                <span className="text-purple-600 font-semibold">Fully Staffed</span>
-              </div>
-            </div>
+              }
+            />
 
-            {/* 3. Pending Application Approvals */}
-            <div className="stitch-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  Pending Approvals
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-                  <Clock size={18} />
+            <StatCard
+              label="Actionable Flags"
+              value={actionableFlags}
+              badge="Active Cases"
+              badgeColor="rose"
+              icon={<AlertTriangle size={18} />}
+              iconBg="rose"
+              footer={
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Action required today</span>
+                  <span className="text-rose-600 font-bold hover:underline cursor-pointer">Review all →</span>
                 </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold text-slate-900">{pendingApps}</span>
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200">
-                  Requires Review
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium mt-3">
-                <span>SLA Target: &lt; 48 hrs</span>
-                <span className="text-amber-600 font-semibold">Review Queue</span>
-              </div>
-            </div>
+              }
+            />
 
-            {/* 4. System & Accreditation Health */}
-            <div className="stitch-card p-5">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  System Health
-                </span>
-                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <ShieldCheck size={18} />
+            <StatCard
+              label="Compliance Health"
+              value={complianceHealth}
+              badge="Optimal"
+              badgeColor="emerald"
+              icon={<ShieldCheck size={18} />}
+              iconBg="emerald"
+              progress={94.8}
+              footer={
+                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                  <span>Audit Readiness</span>
+                  <span className="text-emerald-600 font-bold hover:underline cursor-pointer">Audit →</span>
                 </div>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl font-extrabold text-slate-900">99.8%</span>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Accredited
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-400 font-medium mt-3">
-                <span>Telemetry: Nominal</span>
-                <span className="text-emerald-600 font-semibold">Audit Ready</span>
-              </div>
-            </div>
+              }
+            />
           </div>
 
-          {/* Active Intervention Queue (Stitch Screen 4 Main Table) */}
-          <div className="stitch-card p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          {/* Active Intervention Queue Table (Screen 4) */}
+          <GlassCard className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-bold text-slate-900">Active Intervention Queue</h3>
-                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-red-100 text-red-700 border border-red-200">
-                    {interventionQueueItems.length} Flagged
+                  <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                    Active Intervention Queue
+                  </h3>
+                  <span className="px-2.5 py-0.5 text-[10px] font-black rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                    3 Needs Attention
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Automated risk detection identified students requiring administrative or faculty intervention.
+                  Prioritized list of students requiring institutional follow-up or supervisor communication
                 </p>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                {["ALL", "CRITICAL", "WARNING"].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setQueueFilter(f)}
-                    className={`stitch-pill-btn ${
-                      queueFilter === f
-                        ? "bg-blue-600 text-white shadow-xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200/70"
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
+              {/* Filters */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={queueSearch}
+                    onChange={(e) => setQueueSearch(e.target.value)}
+                    placeholder="Filter queue..."
+                    className="w-40 pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+
+                <select
+                  value={queueDept}
+                  onChange={(e) => setQueueDept(e.target.value)}
+                  className="sims-select py-1 text-xs"
+                >
+                  <option value="ALL">All Departments</option>
+                  <option value="Computer Science">Computer Science</option>
+                  <option value="Electrical Eng">Electrical Eng</option>
+                  <option value="Business Analytics">Business Analytics</option>
+                </select>
+
+                <select
+                  value={queueSeverity}
+                  onChange={(e) => setQueueSeverity(e.target.value)}
+                  className="sims-select py-1 text-xs"
+                >
+                  <option value="ALL">All Severity</option>
+                  <option value="High">High</option>
+                  <option value="Medium">Medium</option>
+                </select>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* High Density Table */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    <th className="pb-3 pl-1">Student &amp; ID</th>
-                    <th className="pb-3">Placement &amp; Mentor</th>
-                    <th className="pb-3">Risk Factor Detected</th>
-                    <th className="pb-3">Severity</th>
-                    <th className="pb-3 text-right pr-1">Intervention</th>
+                  <tr className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <th className="py-2.5 px-3.5">Student Details</th>
+                    <th className="py-2.5 px-3">Company &amp; Role</th>
+                    <th className="py-2.5 px-3">Alert Trigger &amp; Evidence</th>
+                    <th className="py-2.5 px-3">Severity</th>
+                    <th className="py-2.5 px-3">Delay</th>
+                    <th className="py-2.5 px-3 text-right">Direct Intervention</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs">
                   {interventionQueueItems
-                    .filter((item) => queueFilter === "ALL" || item.severity === queueFilter)
+                    .filter((item) => {
+                      if (queueSeverity !== "ALL" && item.severity !== queueSeverity) return false;
+                      if (queueDept !== "ALL" && item.dept !== queueDept) return false;
+                      if (queueSearch && !item.name.toLowerCase().includes(queueSearch.toLowerCase())) return false;
+                      return true;
+                    })
                     .map((item) => (
-                      <tr key={item.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3 pl-1">
-                          <div className="font-bold text-slate-900">{item.student_name}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">
-                            {item.roll_number} • {item.department}
+                      <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3 px-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                              {item.initials}
+                            </div>
+                            <div>
+                              <strong className="text-slate-900 block font-bold leading-tight">
+                                {item.name}
+                              </strong>
+                              <span className="text-[10px] text-slate-400">
+                                {item.roll} • {item.dept}
+                              </span>
+                            </div>
                           </div>
                         </td>
-                        <td className="py-3">
-                          <div className="font-medium text-slate-800">{item.company}</div>
-                          <div className="text-[10px] text-slate-400">Supervisor: {item.mentor}</div>
+
+                        <td className="py-3 px-3">
+                          <span className="text-slate-800 font-bold block leading-tight">
+                            {item.company}
+                          </span>
+                          <span className="text-[10px] text-slate-400">{item.role}</span>
                         </td>
-                        <td className="py-3">
-                          <div className="flex items-center gap-1.5 text-slate-700">
-                            <AlertTriangle size={13} className="text-amber-500 shrink-0" />
-                            <span>{item.issue}</span>
+
+                        <td className="py-3 px-3">
+                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold mb-0.5">
+                            <AlertTriangle size={10} />
+                            <span>{item.triggerTitle}</span>
                           </div>
+                          <p className="text-[10px] text-slate-500 leading-tight">
+                            {item.triggerDesc}
+                          </p>
                         </td>
-                        <td className="py-3">
+
+                        <td className="py-3 px-3">
                           <span
-                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                              item.severity === "CRITICAL"
-                                ? "bg-red-50 text-red-700 border border-red-200"
-                                : item.severity === "WARNING"
-                                ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                : "bg-blue-50 text-blue-700 border border-blue-200"
+                            className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${
+                              item.severity === "High"
+                                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
                             }`}
                           >
                             {item.severity}
                           </span>
                         </td>
-                        <td className="py-3 text-right pr-1">
-                          <button
-                            onClick={() => setActiveTab("feedback")}
-                            className="px-3 py-1 text-xs font-bold text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg border border-blue-200 hover:border-blue-600 transition-all"
-                          >
-                            Contact Mentor
-                          </button>
+
+                        <td className="py-3 px-3">
+                          <strong className="text-slate-800 block text-xs font-bold">
+                            {item.delay}
+                          </strong>
+                          <span className="text-[10px] text-slate-400">{item.delaySub}</span>
+                        </td>
+
+                        <td className="py-3 px-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {item.actionType === "reminder" && (
+                              <button
+                                onClick={() => setInterventionTarget(item)}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
+                              >
+                                <Mail size={12} />
+                                Send Reminder
+                              </button>
+                            )}
+                            {item.actionType === "nudge" && (
+                              <button
+                                onClick={() => setInterventionTarget(item)}
+                                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
+                              >
+                                <Bell size={12} />
+                                Nudge Mentor
+                              </button>
+                            )}
+                            {item.actionType === "review" && (
+                              <button
+                                onClick={() => setInterventionTarget(item)}
+                                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
+                              >
+                                <FileText size={12} />
+                                Review Hours
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setInterventionTarget(item)}
+                              className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100"
+                            >
+                              <Eye size={15} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
                 </tbody>
               </table>
             </div>
-          </div>
 
-          {/* 2-Column Section: Distribution & Department Bars (Left) | Institutional Audit Trail (Right) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left: Department & Cohort Distribution (7 cols) */}
-            <div className="lg:col-span-7 stitch-card p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Department Status Distribution</h3>
-                  <p className="text-xs text-slate-500">
-                    Real-time cross-department progress and SLA alignment metrics.
-                  </p>
-                </div>
-                <button
-                  onClick={loadData}
-                  className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
-                >
-                  <RefreshCw size={12} />
-                  Refresh
+            {/* Table Footer */}
+            <div className="flex items-center justify-between text-xs text-slate-400 mt-4 pt-1">
+              <span>Showing 3 critical flagged interventions awaiting administrator resolution</span>
+              <div className="flex items-center gap-1.5">
+                <button className="px-3 py-1 rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50">
+                  Previous
+                </button>
+                <button className="px-3 py-1 rounded-lg border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50">
+                  Next
                 </button>
               </div>
-
-              {/* Status breakdown bars */}
-              <div className="space-y-3.5 mb-6">
-                <div>
-                  <div className="flex justify-between text-xs font-medium mb-1">
-                    <span className="text-slate-700 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                      On Track ({onTrackCount} Interns)
-                    </span>
-                    <span className="font-bold text-slate-900">
-                      {Math.round((onTrackCount / totalActive) * 100)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div
-                      className="bg-emerald-500 h-2 rounded-full"
-                      style={{ width: `${Math.round((onTrackCount / totalActive) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs font-medium mb-1">
-                    <span className="text-slate-700 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-amber-500" />
-                      Monitor Required ({monitorCount} Interns)
-                    </span>
-                    <span className="font-bold text-slate-900">
-                      {Math.round((monitorCount / totalActive) * 100)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div
-                      className="bg-amber-500 h-2 rounded-full"
-                      style={{ width: `${Math.round((monitorCount / totalActive) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex justify-between text-xs font-medium mb-1">
-                    <span className="text-slate-700 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-red-500" />
-                      Needs Attention ({needsAttentionCount} Interns)
-                    </span>
-                    <span className="font-bold text-slate-900">
-                      {Math.round((needsAttentionCount / totalActive) * 100)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2">
-                    <div
-                      className="bg-red-500 h-2 rounded-full"
-                      style={{ width: `${Math.round((needsAttentionCount / totalActive) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Department breakdown */}
-              <div className="pt-4 border-t border-slate-100">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-                  Enrollment by Department
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
-                    <div className="text-base font-black text-slate-900">42%</div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Computer Eng</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
-                    <div className="text-base font-black text-slate-900">28%</div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Data Science</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
-                    <div className="text-base font-black text-slate-900">18%</div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Cyber Security</div>
-                  </div>
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/60">
-                    <div className="text-base font-black text-slate-900">12%</div>
-                    <div className="text-[11px] text-slate-500 font-medium mt-0.5">Information Tech</div>
-                  </div>
-                </div>
-              </div>
             </div>
+          </GlassCard>
 
-            {/* Right: Institutional Audit Trail (5 cols) (Stitch Screen 2) */}
-            <div className="lg:col-span-5 stitch-card p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Institutional Audit Trail</h3>
-                  <p className="text-xs text-slate-500">Live operational &amp; security event feed</p>
+          {/* Bottom Row: Department Distribution (6 cols) & Institutional Audit Trail (6 cols) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Department Distribution (6 cols) */}
+            <GlassCard className="lg:col-span-6 p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                    Department Distribution
+                  </h3>
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-blue-50 text-blue-700 border border-blue-200/70">
+                    Active Cycle
+                  </span>
                 </div>
-                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  Live Stream
-                </span>
+                <p className="text-xs text-slate-500 mb-5">
+                  342 total enrolled intern placements categorized by collegiate division
+                </p>
+
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-slate-800">Computer Science</span>
+                      <span className="text-slate-500 font-semibold">142 interns (41%)</span>
+                    </div>
+                    <ProgressBar value={41} tone="blue" size="md" />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-slate-800">Electrical Engineering</span>
+                      <span className="text-slate-500 font-semibold">98 interns (28%)</span>
+                    </div>
+                    <ProgressBar value={28} tone="purple" size="md" />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-slate-800">Business Analytics</span>
+                      <span className="text-slate-500 font-semibold">64 interns (19%)</span>
+                    </div>
+                    <ProgressBar value={19} tone="emerald" size="md" />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs font-bold mb-1">
+                      <span className="text-slate-800">Mechanical Engineering</span>
+                      <span className="text-slate-500 font-semibold">38 interns (12%)</span>
+                    </div>
+                    <ProgressBar value={12} tone="amber" size="md" />
+                  </div>
+                </div>
               </div>
 
-              <div className="space-y-4">
-                {auditLogs.map((log, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50"
-                  >
-                    <div className={`w-8 h-8 rounded-lg ${log.bg} flex items-center justify-center shrink-0`}>
-                      {log.icon}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-1">
-                        <span className="text-xs font-bold text-slate-900">{log.title}</span>
-                        <span className="text-[10px] text-slate-400">{log.time}</span>
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-4 border-t border-slate-100 mt-6">
+                <span>100% capacity assigned</span>
+                <button
+                  onClick={() => setActiveTab("milestones")}
+                  className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1"
+                >
+                  <span>Division breakdown</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </GlassCard>
+
+            {/* Institutional Audit Trail (6 cols) */}
+            <GlassCard className="lg:col-span-6 p-6 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                    Institutional Audit Trail
+                  </h3>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Live Stream
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mb-4">
+                  Real-time automated policy triggers and manual intervention events
+                </p>
+
+                <div className="space-y-3.5">
+                  {auditEvents.map((evt) => (
+                    <div
+                      key={evt.id}
+                      className="p-3.5 rounded-xl border border-slate-200/80 bg-white/70 flex items-start gap-3 hover:border-slate-300 transition-all"
+                    >
+                      <div className={`w-8 h-8 rounded-lg ${evt.bg} flex items-center justify-center shrink-0 mt-0.5`}>
+                        {evt.icon}
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{log.sub}</p>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <h4 className="text-xs font-bold text-slate-900 truncate">
+                            {evt.title}
+                          </h4>
+                          <span className="text-[10px] text-slate-400 shrink-0">{evt.time}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-normal">
+                          {evt.sub}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
-              <button
-                onClick={() => setActiveTab("reports")}
-                className="w-full mt-4 py-2 bg-slate-100 hover:bg-slate-200/70 text-slate-700 text-xs font-bold rounded-xl transition-all text-center"
-              >
-                Post New Placement Opportunity
-              </button>
-            </div>
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-4 border-t border-slate-100 mt-6">
+                <span>Showing recent 3 of 48 system events recorded today</span>
+                <button
+                  onClick={() => setActiveTab("reports")}
+                  className="text-blue-600 font-bold hover:underline inline-flex items-center gap-1"
+                >
+                  <span>View full audit history</span>
+                  <ArrowRight size={13} />
+                </button>
+              </div>
+            </GlassCard>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════ */}
+      {/* SCREEN 2: APPLICATIONS WORKFLOW TAB  */}
+      {/* ════════════════════════════════════ */}
+      {activeTab === "milestones" && (
+        <div className="space-y-6">
+          {/* 4 StatCards (Screen 2) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <StatCard
+              label="Pending Review"
+              value="24"
+              icon={<FileText size={18} />}
+              iconBg="blue"
+            />
+            <StatCard
+              label="Agreements Verified"
+              value="142"
+              icon={<ShieldCheck size={18} />}
+              iconBg="purple"
+            />
+            <StatCard
+              label="Compliance Alerts"
+              value="3"
+              icon={<ShieldAlert size={18} />}
+              iconBg="rose"
+            />
+            <StatCard
+              label="Active Placements"
+              value="89"
+              icon={<Briefcase size={18} />}
+              iconBg="slate"
+            />
           </div>
 
-          {/* Pending Applications Review Queue */}
-          <div className="stitch-card p-6">
-            <div className="flex items-center justify-between mb-4">
+          {/* Workflow Table Card */}
+          <GlassCard className="p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
               <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Pending Applications Approval Queue
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                  Internship Approval Workflow
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Review applicant profile, assign designated faculty mentor, and issue placement authorization.
+                  Review pending applications, assign faculty supervisors, and verify institutional compliance.
                 </p>
               </div>
-              {pendingApps > 0 && (
-                <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                  {pendingApps} Awaiting Decision
-                </span>
-              )}
+
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button className="stitch-pill-btn py-1.5 px-3 text-xs">
+                  <Filter size={13} />
+                  Filter applications
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
+                >
+                  <Download size={13} />
+                  Export Report
+                </button>
+              </div>
             </div>
 
-            {applications.filter((a) => a.status === "PENDING").length === 0 ? (
-              <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl">
-                No applications currently awaiting administrative action. ✓
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {applications
-                  .filter((a) => a.status === "PENDING")
-                  .map((app) => (
-                    <div
-                      key={app.id}
-                      className="p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-300 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-slate-900">{app.student_name}</span>
-                          <span className="text-xs text-slate-400">• Applied {timeAgo(app.applied_at)}</span>
+            {/* Table */}
+            <div className="overflow-x-auto rounded-xl border border-slate-200/80 bg-white">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/60 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <th className="py-2.5 px-3.5">Student Details</th>
+                    <th className="py-2.5 px-3">Company &amp; Role</th>
+                    <th className="py-2.5 px-3">Agreement Status</th>
+                    <th className="py-2.5 px-3">Faculty Supervisor</th>
+                    <th className="py-2.5 px-3">Compliance Checklist</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {approvalWorkflowStudents.map((app) => (
+                    <tr key={app.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-3 px-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                            {app.initials}
+                          </div>
+                          <div>
+                            <strong className="text-slate-900 block font-bold leading-tight">
+                              {app.name}
+                            </strong>
+                            <span className="text-[10px] text-slate-400">
+                              {app.degree} • {app.studentId}
+                            </span>
+                          </div>
                         </div>
-                        <div className="text-xs text-slate-600 mt-0.5">
-                          Target Position: <span className="font-semibold text-slate-800">{app.internship_title}</span> at {app.company_name}
-                        </div>
-                        <div className="mt-2.5 flex items-center gap-2">
-                          <label className="text-xs font-bold text-slate-600">Assign Mentor:</label>
+                      </td>
+
+                      <td className="py-3 px-3">
+                        <span className="text-slate-900 font-bold block leading-tight">
+                          {app.company}
+                        </span>
+                        <span className="text-[10px] text-slate-400">{app.role}</span>
+                      </td>
+
+                      <td className="py-3 px-3">
+                        <StatusBadge status={app.status} size="sm" />
+                      </td>
+
+                      <td className="py-3 px-3">
+                        {app.status === "Pending Review" ? (
                           <select
                             value={selectedMentorMap[app.id] || ""}
                             onChange={(e) =>
@@ -674,85 +851,63 @@ export default function AdminPortal() {
                             }
                             className="sims-select text-xs py-1"
                           >
-                            <option value="">— Select Faculty Supervisor —</option>
+                            <option value="">Select Supervisor</option>
                             {mentors.map((m) => (
                               <option key={m.id} value={m.id}>
-                                {m.full_name} ({m.department || "Faculty"})
+                                {m.full_name}
                               </option>
                             ))}
                           </select>
-                        </div>
-                      </div>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-semibold">
+                            {app.supervisor}
+                          </span>
+                        )}
+                      </td>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-1.5">
+                          {app.complianceChecks.map((passed, idx) => (
+                            <span
+                              key={idx}
+                              className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+                                passed
+                                  ? "bg-purple-100 text-purple-700"
+                                  : "bg-rose-100 text-rose-700"
+                              }`}
+                            >
+                              {passed ? "✓" : "✗"}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-3 text-right">
                         <button
                           onClick={() => handleApplicationAction(app.id, "ACCEPTED")}
                           disabled={processingId === app.id}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                          className="p-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg transition-all"
+                          title="Authorize Placement"
                         >
-                          <CheckCircle2 size={13} />
-                          {processingId === app.id ? "Processing..." : "Authorize Placement"}
+                          <Check size={14} />
                         </button>
-                        <button
-                          onClick={() => handleApplicationAction(app.id, "REJECTED")}
-                          disabled={processingId === app.id}
-                          className="px-4 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 text-xs font-bold rounded-xl transition-all"
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </div>
+                      </td>
+                    </tr>
                   ))}
-              </div>
-            )}
-          </div>
+                </tbody>
+              </table>
+            </div>
+          </GlassCard>
         </div>
       )}
 
-      {/* ════════════════════════════════════ */}
-      {/* MILESTONES TAB — Institutional Intel*/}
-      {/* ════════════════════════════════════ */}
-      {activeTab === "milestones" && (
-        <div className="stitch-card p-6">
-          <h2 className="font-extrabold text-slate-900 text-base mb-1">Institutional Accreditation Intelligence</h2>
-          <p className="text-xs text-slate-500 mb-5">Continuous monitoring against academic accreditation KPIs.</p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/60">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Completion Rate
-              </span>
-              <div className="text-2xl font-black text-slate-900">96.4%</div>
-              <p className="text-[11px] text-emerald-600 font-semibold mt-1">Exceeding standard threshold</p>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/60">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Turnaround SLA
-              </span>
-              <div className="text-2xl font-black text-slate-900">1.4 Days</div>
-              <p className="text-[11px] text-blue-600 font-semibold mt-1">Faculty response speed</p>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/60">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">
-                Active Partner Sites
-              </span>
-              <div className="text-2xl font-black text-slate-900">14 Organizations</div>
-              <p className="text-[11px] text-purple-600 font-semibold mt-1">100% Verified MOUs</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════ */}
-      {/* REPORTS TAB — Post New Internship   */}
-      {/* ════════════════════════════════════ */}
+      {/* Post Internship Tab */}
       {activeTab === "reports" && (
-        <div className="stitch-card p-6 max-w-2xl">
-          <h2 className="font-extrabold text-slate-900 text-base mb-1">Post New Internship Opportunity</h2>
-          <p className="text-xs text-slate-500 mb-5">
-            Publish verified enterprise placement positions to the student internship board.
-          </p>
-
+        <GlassCard className="p-6 max-w-2xl">
+          <SectionHeader
+            title="Publish Placement Opportunity"
+            subtitle="Publish accredited enterprise openings to the university intern directory."
+          />
           <form onSubmit={handlePostInternship} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
@@ -761,8 +916,8 @@ export default function AdminPortal() {
                   required
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Cloud Security Intern"
-                  className="sims-input"
+                  placeholder="e.g. AI Engineering Intern"
+                  className="sims-input text-xs"
                 />
               </div>
               <div>
@@ -771,51 +926,31 @@ export default function AdminPortal() {
                   required
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="e.g. Datadog Inc"
-                  className="sims-input"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Industry Domain</label>
-                <input
-                  value={industry}
-                  onChange={(e) => setIndustry(e.target.value)}
-                  className="sims-input"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Location</label>
-                <input
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  className="sims-input"
+                  placeholder="e.g. NovaTech Solutions"
+                  className="sims-input text-xs"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Role Description &amp; Scope</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Role Description</label>
               <textarea
                 required
                 rows={3}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
-                placeholder="Key deliverables and learning expectations..."
-                className="sims-textarea"
+                className="sims-textarea text-xs"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Monthly Stipend (₹)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Stipend (₹/mo)</label>
                 <input
                   type="number"
                   value={stipend}
                   onChange={(e) => setStipend(Number(e.target.value))}
-                  className="sims-input"
+                  className="sims-input text-xs"
                 />
               </div>
               <div>
@@ -824,19 +959,19 @@ export default function AdminPortal() {
                   type="number"
                   value={durationWeeks}
                   onChange={(e) => setDurationWeeks(Number(e.target.value))}
-                  className="sims-input"
+                  className="sims-input text-xs"
                 />
               </div>
               <div className="flex items-center gap-2 pt-6">
                 <input
                   type="checkbox"
-                  id="remoteOpt"
+                  id="remoteOptAdmin"
                   checked={isRemote}
                   onChange={(e) => setIsRemote(e.target.checked)}
                   className="w-4 h-4 accent-blue-600 rounded"
                 />
-                <label htmlFor="remoteOpt" className="text-xs font-bold text-slate-700">
-                  Remote Placement
+                <label htmlFor="remoteOptAdmin" className="text-xs font-bold text-slate-700">
+                  Remote
                 </label>
               </div>
             </div>
@@ -848,19 +983,12 @@ export default function AdminPortal() {
               <input
                 value={requiredSkillsStr}
                 onChange={(e) => setRequiredSkillsStr(e.target.value)}
-                placeholder="Python, Next.js, Docker, Kubernetes"
-                className="sims-input"
+                className="sims-input text-xs"
               />
             </div>
 
             {postMsg && (
-              <div
-                className={`text-xs p-3 rounded-xl font-medium ${
-                  postMsg.startsWith("Error")
-                    ? "bg-red-50 text-red-700 border border-red-200"
-                    : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                }`}
-              >
+              <div className="p-3 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                 {postMsg}
               </div>
             )}
@@ -868,64 +996,84 @@ export default function AdminPortal() {
             <button
               type="submit"
               disabled={postingInternship}
-              className="w-full sm:w-auto px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center justify-center gap-1.5"
+              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
             >
               <Plus size={14} />
               {postingInternship ? "Publishing..." : "Publish Placement"}
             </button>
           </form>
-        </div>
+        </GlassCard>
       )}
 
-      {/* ════════════════════════════════════ */}
-      {/* FEEDBACK TAB — Faculty Mentors Roster*/}
-      {/* ════════════════════════════════════ */}
-      {activeTab === "feedback" && (
-        <div className="stitch-card p-6">
-          <h2 className="font-extrabold text-slate-900 text-base mb-4">Faculty Mentors Directory</h2>
-          <div className="space-y-3">
-            {mentors.map((m) => (
-              <div
-                key={m.id}
-                className="p-4 rounded-xl border border-slate-200 bg-white hover:border-blue-300 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-              >
-                <div>
-                  <div className="font-bold text-slate-900">{m.full_name}</div>
-                  <div className="text-xs text-slate-500">
-                    {m.designation || "Faculty Mentor"} • {m.department || "Computer Engineering"}
-                  </div>
-                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {m.employee_id || "#FAC-4019"}</div>
-                </div>
-                <span className="px-3 py-1 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-full border border-emerald-200 self-start sm:self-auto">
-                  Active Supervisor
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════ */}
-      {/* SETTINGS TAB                        */}
-      {/* ════════════════════════════════════ */}
+      {/* Settings Tab */}
       {activeTab === "settings" && (
-        <div className="stitch-card p-6 max-w-lg">
-          <h2 className="font-extrabold text-slate-900 text-base mb-3">Institutional Administrator</h2>
+        <GlassCard className="p-6 max-w-lg">
+          <SectionHeader title="Institutional Administrator Credentials" />
           <div className="space-y-3 text-xs">
-            <div className="p-3 bg-slate-50 rounded-xl">
-              <span className="text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Administrator</span>
-              <span className="font-bold text-slate-800 text-sm">{user?.full_name}</span>
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/60">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                Official Title
+              </span>
+              <strong className="text-slate-800 text-sm">{user?.full_name}</strong>
             </div>
-            <div className="p-3 bg-slate-50 rounded-xl">
-              <span className="text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Email</span>
-              <span className="font-bold text-slate-800 text-sm">{user?.email}</span>
-            </div>
-            <div className="p-3 bg-slate-50 rounded-xl">
-              <span className="text-slate-400 font-bold uppercase tracking-wider block mb-0.5">Security Level</span>
-              <span className="font-bold text-purple-700 text-sm">Level 4 Institutional Superadmin</span>
+            <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/60">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                Institutional Security Level
+              </span>
+              <strong className="text-purple-700 text-sm">Level 4 Institutional Superadmin</strong>
             </div>
           </div>
-        </div>
+        </GlassCard>
+      )}
+
+      {/* Intervention Action Modal */}
+      {interventionTarget && (
+        <Modal
+          isOpen={!!interventionTarget}
+          onClose={() => setInterventionTarget(null)}
+          title={`Intervention: ${interventionTarget.name}`}
+          subtitle={`Trigger administrative communication or compliance follow-up for ${interventionTarget.company || "Cohort"}.`}
+          footer={
+            <>
+              <button
+                type="button"
+                onClick={() => setInterventionTarget(null)}
+                className="btn-secondary text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setInterventionTarget(null);
+                }}
+                className="btn-primary text-xs"
+              >
+                Dispatch Action
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-3.5">
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/60 text-xs">
+              <span className="text-slate-400 font-bold block mb-0.5">Target Student / Alert</span>
+              <strong className="text-slate-800">{interventionTarget.name}</strong>
+              <p className="text-slate-500 mt-1">{interventionTarget.triggerDesc || "Official notice"}</p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Custom Directive / Notes
+              </label>
+              <textarea
+                rows={3}
+                value={interventionNote}
+                onChange={(e) => setInterventionNote(e.target.value)}
+                placeholder="Specify required remediation timeline, mentor sync date, or warning message..."
+                className="sims-textarea text-xs"
+              />
+            </div>
+          </div>
+        </Modal>
       )}
     </DashboardLayout>
   );

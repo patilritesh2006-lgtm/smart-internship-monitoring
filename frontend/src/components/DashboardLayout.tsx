@@ -8,6 +8,7 @@ import {
   BarChart2,
   BookOpen,
   Briefcase,
+  Clock,
   Flag,
   MessageSquare,
   PlusCircle,
@@ -46,8 +47,8 @@ export function DashboardLayout({
     if (role === "STUDENT") {
       return [
         { id: "overview",   label: "Home",       icon: <BarChart2 size={18} /> },
+        { id: "timesheets", label: "Timesheet",  icon: <Clock size={18} /> },
         { id: "milestones", label: "Milestones", icon: <Flag size={18} /> },
-        { id: "reports",    label: "Reports",    icon: <BookOpen size={18} /> },
         { id: "feedback",   label: "Skills",     icon: <TrendingUp size={18} /> },
         { id: "settings",   label: "Profile",    icon: <Settings size={18} /> },
       ];
