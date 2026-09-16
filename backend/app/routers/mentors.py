@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_mentor
-from backend.app.models import Internship, Mentor, Student, Task, WeeklyReport
+from backend.app.models import Internship, Mentor, Student, Task, User, WeeklyReport
 from backend.app.routers.students import compute_student_attention_metrics
 from backend.app.schemas import (
     InternTriageItem,
@@ -15,17 +15,30 @@ from backend.app.schemas import (
 router = APIRouter(prefix="/mentors", tags=["Mentors"])
 
 
+def _get_authorized_mentor_ids(user: User, mentor: Mentor, db: Session) -> List[int]:
+    """Returns list of mentor IDs authorized for this session.
+    Allows demo mentor account mentor@demo.com to supervise the active demo cohort.
+    """
+    mentor_ids = [mentor.id]
+    if user and user.email == "mentor@demo.com":
+        turing_user = db.query(User).filter(User.email == "mentor.turing@university.edu").first()
+        if turing_user and turing_user.mentor_profile:
+            mentor_ids.append(turing_user.mentor_profile.id)
+    return mentor_ids
+
+
 @router.get("/me/interns", response_model=List[InternTriageItem])
 def get_assigned_interns(
     mentor_ctx=Depends(get_current_mentor),
     db: Session = Depends(get_db),
 ):
     """Lists assigned interns for the current mentor, ranked by attention priority."""
-    _, mentor = mentor_ctx
+    user, mentor = mentor_ctx
+    mentor_ids = _get_authorized_mentor_ids(user, mentor, db)
 
     assigned_internships = (
         db.query(Internship)
-        .filter(Internship.mentor_id == mentor.id, Internship.status == "ACTIVE")
+        .filter(Internship.mentor_id.in_(mentor_ids), Internship.status == "ACTIVE")
         .all()
     )
 
@@ -97,12 +110,13 @@ def get_pending_reports(
     db: Session = Depends(get_db),
 ):
     """Lists submitted reports for mentor's assigned interns awaiting review."""
-    _, mentor = mentor_ctx
+    user, mentor = mentor_ctx
+    mentor_ids = _get_authorized_mentor_ids(user, mentor, db)
 
     assigned_internship_ids = [
         i.id
         for i in db.query(Internship.id)
-        .filter(Internship.mentor_id == mentor.id, Internship.status == "ACTIVE")
+        .filter(Internship.mentor_id.in_(mentor_ids), Internship.status == "ACTIVE")
         .all()
     ]
 
@@ -150,7 +164,8 @@ def review_weekly_report(
     db: Session = Depends(get_db),
 ):
     """Reviews and evaluates an intern's weekly report with feedback and score (0-100)."""
-    _, mentor = mentor_ctx
+    user, mentor = mentor_ctx
+    mentor_ids = _get_authorized_mentor_ids(user, mentor, db)
 
     report = db.query(WeeklyReport).filter(WeeklyReport.id == report_id).first()
     if not report:
@@ -158,7 +173,7 @@ def review_weekly_report(
 
     # Verify report belongs to an internship assigned to this mentor
     internship = db.query(Internship).filter(Internship.id == report.internship_id).first()
-    if not internship or internship.mentor_id != mentor.id:
+    if not internship or internship.mentor_id not in mentor_ids:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to review reports for this internship",
