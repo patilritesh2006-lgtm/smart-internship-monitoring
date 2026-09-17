@@ -29,7 +29,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const savedToken = getAuthToken();
-    const savedUserStr = localStorage.getItem("simms_user");
+    const savedUserStr =
+      localStorage.getItem("eduintern_user") || localStorage.getItem("simms_user");
 
     if (savedToken && savedUserStr) {
       try {
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
 
       setAuthToken(resp.access_token);
+      localStorage.setItem("eduintern_user", JSON.stringify(sessionUser));
       localStorage.setItem("simms_user", JSON.stringify(sessionUser));
       setToken(resp.access_token);
       setUser(sessionUser);

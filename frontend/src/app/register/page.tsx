@@ -42,6 +42,12 @@ export default function RegisterPage() {
       }
       const resp = await api.register(payload);
       setAuthToken(resp.access_token);
+      localStorage.setItem("eduintern_user", JSON.stringify({
+        user_id: resp.user_id,
+        email: resp.email,
+        full_name: resp.full_name,
+        role: resp.role,
+      }));
       localStorage.setItem("simms_user", JSON.stringify({
         user_id: resp.user_id,
         email: resp.email,

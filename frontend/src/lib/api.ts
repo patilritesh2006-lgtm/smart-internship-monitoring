@@ -1,20 +1,23 @@
-// Centralized API client for Smart Internship Management & Monitoring System
+// Centralized API client for EduIntern Academic Internship Management & Monitoring System
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
 
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("simms_token");
+  return localStorage.getItem("eduintern_token") || localStorage.getItem("simms_token");
 }
 
 export function setAuthToken(token: string): void {
   if (typeof window !== "undefined") {
+    localStorage.setItem("eduintern_token", token);
     localStorage.setItem("simms_token", token);
   }
 }
 
 export function clearAuthToken(): void {
   if (typeof window !== "undefined") {
+    localStorage.removeItem("eduintern_token");
+    localStorage.removeItem("eduintern_user");
     localStorage.removeItem("simms_token");
     localStorage.removeItem("simms_user");
   }

@@ -11,9 +11,17 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Smart Internship Management & Monitoring System",
+  title: "EduIntern — Academic Internship Management & Monitoring System",
   description:
-    "Next-generation academic internship tracking platform with explainable deterministic intelligence, skill gap analysis, and progress monitoring.",
+    "EduIntern: Next-generation academic internship tracking platform with explainable deterministic intelligence, skill gap analysis, and progress monitoring.",
+  icons: {
+    icon: [
+      { url: "/favicon.ico" },
+      { url: "/favicon.png", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
+    apple: "/icon-192.png",
+  },
 };
 
 export default function RootLayout({

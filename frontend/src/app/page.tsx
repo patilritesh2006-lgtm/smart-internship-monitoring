@@ -143,7 +143,7 @@ export default function HomePage() {
       </section>
 
       <footer className="text-center pb-8 text-xs text-slate-400">
-        Smart Internship Management &amp; Monitoring System — ED-06 Hackathon
+        EduIntern — Academic Internship Management &amp; Monitoring System
       </footer>
     </div>
   );
