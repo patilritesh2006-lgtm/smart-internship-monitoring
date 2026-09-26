@@ -20,10 +20,12 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         )
 
     role_upper = payload.role.upper()
-    if role_upper not in ["STUDENT", "MENTOR", "ADMIN"]:
+    # Security: Self-registration is only permitted for STUDENT and MENTOR roles.
+    # ADMIN accounts are provisioned exclusively through the seeding process or by existing administrators.
+    if role_upper not in ["STUDENT", "MENTOR"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Role must be one of: STUDENT, MENTOR, ADMIN",
+            detail="Public registration supports Student and Mentor roles only. Contact your administrator for elevated access.",
         )
 
     new_user = User(

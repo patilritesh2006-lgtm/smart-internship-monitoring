@@ -1,7 +1,10 @@
 import sys
 import logging
+import time
+import threading
 from pathlib import Path
 from contextlib import asynccontextmanager
+from collections import defaultdict
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -41,22 +44,148 @@ async def lifespan(app: FastAPI):
     yield
 
 
+# Disable interactive API docs in production to reduce attack surface
+_docs_url = "/docs" if settings.ENVIRONMENT.lower() != "production" else None
+_redoc_url = "/redoc" if settings.ENVIRONMENT.lower() != "production" else None
+_openapi_url = "/openapi.json" if settings.ENVIRONMENT.lower() != "production" else None
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Full-stack API integrating university internship tracking with deterministic intelligence analytics.",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
 )
 
-# Production-ready CORS configuration: supports explicit origins, wildcard, and Vercel/Render preview domains
+# ──────────────────────────────────────────────────────────────────────────────
+# SECURITY HEADERS MIDDLEWARE
+# Adds essential security response headers to every HTTP response.
+# ──────────────────────────────────────────────────────────────────────────────
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    # Prevent MIME sniffing attacks
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Protect against clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+    # Strict referrer policy
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # Restrict browser feature access
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    # Basic CSP for an API (no HTML served, but belt-and-suspenders)
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'"
+    # Hide server framework information
+    response.headers["X-Powered-By"] = ""
+    return response
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# IN-MEMORY RATE LIMITER (IP-based, sliding-window counter)
+# Applied to authentication endpoints to prevent brute-force attacks and DoS.
+# - Failed logins: Maximum 10 failed attempts per 60s per IP (OWASP brute-force defense)
+# - Total auth calls: Maximum 100 requests per 60s per IP (DoS defense)
+# ──────────────────────────────────────────────────────────────────────────────
+_failed_auth_store: dict = defaultdict(list)
+_req_rate_store: dict = defaultdict(list)
+_rate_limit_lock = threading.Lock()
+
+RATE_LIMIT_PATHS = {"/api/auth/login", "/api/auth/register"}
+MAX_FAILED_AUTH = 10           # Maximum failed credentials attempts per window
+MAX_TOTAL_AUTH_REQ = 100       # Maximum total requests per window
+RATE_LIMIT_WINDOW_SECONDS = 60  # Sliding window in seconds
+
+
+def _get_client_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "127.0.0.1"
+
+
+@app.middleware("http")
+async def rate_limit_auth_endpoints(request: Request, call_next):
+    """
+    Sliding-window rate limiter for authentication endpoints.
+    Blocks clients after 10 failed auth attempts (brute-force defense)
+    or 100 total requests (flooding defense) within a 60-second window.
+    """
+    path = request.url.path
+    if path in RATE_LIMIT_PATHS:
+        client_ip = _get_client_ip(request)
+        now = time.monotonic()
+        with _rate_limit_lock:
+            # Prune expired timestamps
+            _failed_auth_store[client_ip] = [
+                ts for ts in _failed_auth_store[client_ip]
+                if now - ts < RATE_LIMIT_WINDOW_SECONDS
+            ]
+            _req_rate_store[client_ip] = [
+                ts for ts in _req_rate_store[client_ip]
+                if now - ts < RATE_LIMIT_WINDOW_SECONDS
+            ]
+
+            if len(_failed_auth_store[client_ip]) >= MAX_FAILED_AUTH:
+                logger.warning(
+                    "Brute force lockout for IP %s on %s (%d failed attempts in %ds)",
+                    client_ip, path, len(_failed_auth_store[client_ip]), RATE_LIMIT_WINDOW_SECONDS
+                )
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={
+                        "detail": (
+                            f"Too many requests. Maximum {MAX_FAILED_AUTH} failed authentication "
+                            f"attempts per {RATE_LIMIT_WINDOW_SECONDS} seconds are allowed."
+                        )
+                    },
+                    headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
+                )
+
+            if len(_req_rate_store[client_ip]) >= MAX_TOTAL_AUTH_REQ:
+                logger.warning(
+                    "Rate limit exceeded for IP %s on %s (%d requests in %ds)",
+                    client_ip, path, len(_req_rate_store[client_ip]), RATE_LIMIT_WINDOW_SECONDS
+                )
+                return JSONResponse(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    content={
+                        "detail": (
+                            f"Too many requests. Maximum {MAX_TOTAL_AUTH_REQ} requests "
+                            f"per {RATE_LIMIT_WINDOW_SECONDS} seconds are allowed."
+                        )
+                    },
+                    headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
+                )
+
+            _req_rate_store[client_ip].append(now)
+
+        response = await call_next(request)
+
+        # Record failed authentication attempts
+        if response.status_code == status.HTTP_401_UNAUTHORIZED:
+            with _rate_limit_lock:
+                _failed_auth_store[client_ip].append(time.monotonic())
+
+        return response
+
+    return await call_next(request)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# CORS CONFIGURATION
+# Security: When wildcard '*' is used, credentials MUST NOT be allowed.
+# Fixed: wildcard mode now disables credentials (per CORS specification).
+# ──────────────────────────────────────────────────────────────────────────────
 cors_origins = settings.cors_origins_list
 if "*" in cors_origins or settings.CORS_ORIGINS == "*":
+    # Wildcard mode: credentials MUST be False per CORS specification
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_credentials=False,  # Security fix: cannot combine * with credentials=True
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
     )
 else:
     app.add_middleware(
@@ -64,8 +193,8 @@ else:
         allow_origins=cors_origins,
         allow_origin_regex=r"^https://.*\.vercel\.app$|^https://.*\.onrender\.com$|^http://localhost(:\d+)?$|^http://127\.0\.0\.1(:\d+)?$",
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
     )
 
 
@@ -117,7 +246,7 @@ def health_check():
 def root():
     return {
         "message": "Welcome to the Smart Internship Management & Monitoring System API",
-        "docs_url": "/docs",
+        "docs_url": "/docs" if settings.ENVIRONMENT.lower() != "production" else "disabled",
         "health_url": "/health",
         "environment": settings.ENVIRONMENT,
     }

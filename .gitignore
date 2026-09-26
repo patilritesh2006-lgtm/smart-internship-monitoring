@@ -10,4 +10,5 @@ venv/
 .pytest_cache/
 .coverage
 .DS_Store
-
+test-results/
+playwright-report/

@@ -54,9 +54,9 @@ export default function RegisterPage() {
         full_name: resp.full_name,
         role: resp.role,
       }));
-      if (resp.role === "STUDENT") router.push("/student");
-      else if (resp.role === "MENTOR") router.push("/mentor");
-      else router.push("/");
+      if (resp.role === "STUDENT") window.location.href = "/student";
+      else if (resp.role === "MENTOR") window.location.href = "/mentor";
+      else window.location.href = "/";
     } catch (err: any) {
       setError(err.message || "Registration failed. Please try again.");
     } finally {

@@ -14,7 +14,9 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: CORS_ORIGINS
-        value: "*"
+        # SECURITY: Replace with your actual Vercel frontend URL before deploying.
+        # Do NOT use wildcard '*' in production — it disables credential security.
+        value: "https://your-frontend.vercel.app"
 
   # Next.js 14 Frontend Web Service
   - type: web

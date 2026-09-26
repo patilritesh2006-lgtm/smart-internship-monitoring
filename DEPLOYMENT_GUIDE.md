@@ -30,8 +30,8 @@ The gold-standard zero-error deployment is:
    * **Instance Type**: `Free`
 5. Click **Advanced** → **Add Environment Variable**:
    * `ENVIRONMENT` = `production`
-   * `SECRET_KEY` = `university-smart-internship-secure-jwt-secret-key-32-chars-min`
-   * `CORS_ORIGINS` = `*`
+   * `SECRET_KEY` = *(Generate a strong secret: run `python -c "import secrets; print(secrets.token_hex(32))"` locally and paste the output here. **NEVER use the default value.)**
+   * `CORS_ORIGINS` = `https://your-frontend.vercel.app` *(replace with your actual Vercel frontend URL — do NOT use `*` in production)*
 6. Click **Create Web Service**.
 7. Once deployed, copy your Render backend URL (e.g., `https://eduintern-backend.onrender.com`).
 

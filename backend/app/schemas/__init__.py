@@ -9,19 +9,19 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str = Field(..., min_length=6)
-    full_name: str = Field(..., min_length=2)
-    role: str = Field(default="STUDENT")  # "STUDENT", "MENTOR", "ADMIN"
-    department: Optional[str] = "Computer Science & Engineering"
-    roll_number: Optional[str] = None  # for student
-    academic_year: Optional[int] = 3   # for student
-    designation: Optional[str] = None  # for mentor
-    employee_id: Optional[str] = None  # for mentor
+    password: str = Field(..., min_length=6, max_length=128)
+    full_name: str = Field(..., min_length=2, max_length=255)
+    role: str = Field(default="STUDENT", max_length=50)  # "STUDENT" or "MENTOR" only via public API
+    department: Optional[str] = Field(default="Computer Science & Engineering", max_length=100)
+    roll_number: Optional[str] = Field(default=None, max_length=50)  # for student
+    academic_year: Optional[int] = Field(default=3, ge=1, le=6)  # 1-6 valid academic years
+    designation: Optional[str] = Field(default=None, max_length=100)  # for mentor
+    employee_id: Optional[str] = Field(default=None, max_length=50)  # for mentor
 
 
 class TokenResponse(BaseModel):
@@ -70,10 +70,10 @@ class StudentOut(BaseModel):
 
 
 class StudentProfileUpdate(BaseModel):
-    phone: Optional[str] = None
-    department: Optional[str] = None
-    academic_year: Optional[int] = None
-    skills: Optional[List[str]] = None
+    phone: Optional[str] = Field(default=None, max_length=50)
+    department: Optional[str] = Field(default=None, max_length=100)
+    academic_year: Optional[int] = Field(default=None, ge=1, le=6)
+    skills: Optional[List[str]] = Field(default=None, max_length=50)  # max 50 skills
 
 
 class MentorOut(BaseModel):
@@ -201,10 +201,10 @@ class TaskOut(BaseModel):
 # ==============================================================================
 
 class WeeklyReportCreate(BaseModel):
-    week_number: int
-    achievements: str
-    challenges: Optional[str] = None
-    hours_spent: float = 40.0
+    week_number: int = Field(..., ge=1, le=52)
+    achievements: str = Field(..., min_length=1, max_length=5000)
+    challenges: Optional[str] = Field(default=None, max_length=5000)
+    hours_spent: float = Field(default=40.0, ge=0, le=168)  # max 168 hours/week
 
 
 class WeeklyReportReview(BaseModel):
@@ -284,9 +284,9 @@ class InternTriageItem(BaseModel):
 # ==============================================================================
 
 class InterventionCreate(BaseModel):
-    intervention_type: str = "1-on-1 Academic Check-in"
-    notes: str
-    action_taken: Optional[str] = None
+    intervention_type: str = Field(default="1-on-1 Academic Check-in", max_length=100)
+    notes: str = Field(..., min_length=1, max_length=5000)
+    action_taken: Optional[str] = Field(default=None, max_length=255)
 
 
 class InterventionOut(BaseModel):

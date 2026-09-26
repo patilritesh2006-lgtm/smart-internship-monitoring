@@ -145,11 +145,25 @@ python -m pytest -v
 python verify_e2e_live.py
 ```
 
+### 4.5 Running Playwright Automated E2E Test Suite (79 Tests)
+```powershell
+# Run all 79 automated E2E tests across 13 suites
+npm run test:e2e
+
+# Run with interactive Playwright UI mode
+npm run test:e2e:ui
+
+# View generated interactive HTML report
+npm run test:e2e:report
+```
+*See complete documentation and category breakdown in [TESTING.md](TESTING.md).*
+
 ---
 
 ## 5. Verification & Testing Evidence
 
-1. **Intelligence Engine:** 40 unit tests in `intelligence/tests/` covering boundary conditions, division-by-zero guards, case variations, duplicate normalization, and reason deduplication.
-2. **Backend Integration:** 21 integration tests in `backend/tests/test_api_integration.py` covering authentication, role permissions, milestone toggling, live attention calculations, triage ranking, and skill gap endpoints.
-3. **Frontend Production Build:** Verified via `npm run build` in `frontend/` with zero TypeScript errors and all 10 static routes generated.
-4. **Responsive Mobile Verification:** Tested across mobile (< 768px), tablet (768px – 1024px), and desktop (≥ 1024px) viewports.
+1. **Playwright E2E Suite:** **79 / 79 tests passing (100%)** across 13 modular categories (Startup Health, Auth, Navigation, UI, Forms, CRUD, REST API, Boundary Validation, RBAC Security, Responsive Viewports, Error Handling, a11y, and End-to-End User Workflows). HTML report located in `playwright-report/`.
+2. **Intelligence Engine:** 40 unit tests in `intelligence/tests/` covering boundary conditions, division-by-zero guards, case variations, duplicate normalization, and reason deduplication.
+3. **Backend Integration:** 21 integration tests in `backend/tests/test_api_integration.py` covering authentication, role permissions, milestone toggling, live attention calculations, triage ranking, and skill gap endpoints.
+4. **Frontend Production Build:** Verified via `npm run build` in `frontend/` with zero TypeScript errors and all static routes generated.
+5. **Responsive Mobile Verification:** Tested across mobile (375x667), tablet (768x1024), and desktop (1280x800) viewports.
