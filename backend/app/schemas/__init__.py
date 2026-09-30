@@ -251,6 +251,13 @@ class ProgressFactorBreakdown(BaseModel):
     task_completion: float
     report_submission: float
     mentor_feedback: float
+    attendance_rate: Optional[float] = None
+    task_velocity: Optional[float] = None
+    report_punctuality: Optional[float] = None
+    days_since_last_activity: Optional[int] = None
+    activity_consistency: Optional[float] = None
+    progress_trend: Optional[str] = None
+    days_remaining: Optional[int] = None
 
 
 class ProgressAttentionResponseSchema(BaseModel):
@@ -259,6 +266,13 @@ class ProgressAttentionResponseSchema(BaseModel):
     factors: ProgressFactorBreakdown
     reasons: List[str]
     recommendations: List[str]
+    progress_health_score: Optional[float] = None
+    progress_trend: Optional[str] = None
+    risk_probability: Optional[float] = None
+    risk_label: Optional[str] = None
+    model_version: Optional[str] = None
+    model_available: Optional[bool] = None
+    top_risk_factors: Optional[List[Dict[str, Any]]] = None
 
 
 class InternTriageItem(BaseModel):

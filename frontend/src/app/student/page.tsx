@@ -416,26 +416,30 @@ export default function StudentPortal() {
   };
   const currentWeek = calculateCurrentWeek();
 
-  const attentionScore = Math.round(attention?.attention_score ?? (totalTasks > 0 ? taskPct : 82));
-  const attentionStatus = attention?.attention_status || "ON_TRACK";
+  const reportPct = Math.min(100, Math.round((reports.length / Math.max(1, currentWeek)) * 100));
+  const fallbackScore = Math.round((taskPct * 0.5) + (reportPct * 0.5));
+  const fallbackStatus = fallbackScore >= 75 ? "ON_TRACK" : fallbackScore >= 50 ? "MONITOR" : "NEEDS_ATTENTION";
+
+  const attentionScore = Math.round(attention?.attention_score ?? fallbackScore);
+  const attentionStatus = attention?.attention_status || fallbackStatus;
   const factors = attention?.factors || {
-    progress_consistency: 85,
+    progress_consistency: reportPct,
     task_completion: taskPct,
-    report_submission: Math.min(100, Math.round((reports.length / Math.max(1, currentWeek)) * 100)),
-    mentor_feedback: 80,
+    report_submission: reportPct,
+    mentor_feedback: 75,
   };
   const reasons: string[] =
     attention?.reasons && attention.reasons.length > 0
       ? attention.reasons
       : [
           `Task completion is tracking at ${taskPct}% (${completedTasks} of ${totalTasks} completed).`,
-          `Logged ${reports.length} verified weekly progress reports.`,
+          `Submitted ${reports.length} of ${currentWeek} expected weekly progress reports.`,
         ];
   const recommendations: string[] =
     attention?.recommendations && attention.recommendations.length > 0
       ? attention.recommendations
       : [
-          "Continue submitting weekly logbooks before the Friday 5:00 PM deadline.",
+          "Continue submitting weekly logbooks before the scheduled Friday deadline.",
           "Coordinate with your faculty supervisor on upcoming milestone reviews.",
         ];
 
@@ -699,6 +703,11 @@ export default function StudentPortal() {
               title="Progress Analysis"
               subtitle="Monitoring Status & Academic Factors"
               showBreakdown={true}
+              risk_probability={attention?.risk_probability}
+              risk_label={attention?.risk_label}
+              model_version={attention?.model_version}
+              model_available={attention?.model_available}
+              top_risk_factors={attention?.top_risk_factors}
               onActionClick={() => setActiveTab("feedback")}
               actionLabel="Detailed 4-Factor Breakdown"
             />
@@ -1520,7 +1529,7 @@ export default function StudentPortal() {
                     </li>
                     <li className="flex items-start gap-2">
                       <Check size={14} className="text-emerald-600 shrink-0 mt-0.5" />
-                      <span>Submit by Friday 5:00 PM to avoid attention score consistency penalties.</span>
+                      <span>Submit by Friday 5:00 PM to maintain progress health and reporting cadence.</span>
                     </li>
                   </ul>
                 </GlassCard>

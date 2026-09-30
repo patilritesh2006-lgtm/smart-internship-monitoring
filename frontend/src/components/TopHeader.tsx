@@ -68,9 +68,14 @@ export function TopHeader({
           <SimsLogo variant="icon" width={28} />
         </div>
         <div className="min-w-0">
-          <h1 className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight truncate">
-            {title}
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight truncate">
+              {title}
+            </h1>
+            <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 shrink-0">
+              Demo Mode — Synthetic Data
+            </span>
+          </div>
           {subtitle && (
             <p className="text-[11px] text-slate-400 font-medium hidden md:block truncate">
               {subtitle}

@@ -1,0 +1,112 @@
+{
+  "model_version": "synthetic-v1.1",
+  "model_type": "RandomForestClassifier",
+  "random_seed": 42,
+  "split_method": "Group-aware synthetic student split (GroupShuffleSplit)",
+  "split_info": {
+    "training_samples": 2100,
+    "validation_samples": 450,
+    "test_samples": 450,
+    "train_unique_students": 420,
+    "val_unique_students": 90,
+    "test_unique_students": 90,
+    "group_leakage_detected": false
+  },
+  "target_distribution": {
+    "total_observations": 3000,
+    "total_students": 600,
+    "class_0_low_risk": 2350,
+    "class_1_attention_risk": 650,
+    "attention_risk_ratio": 0.2167
+  },
+  "hyperparameters": {
+    "n_estimators": 100,
+    "max_depth": 6,
+    "min_samples_split": 10,
+    "min_samples_leaf": 5,
+    "class_weight": "balanced",
+    "random_state": 42
+  },
+  "evaluation_metrics": {
+    "accuracy": 0.9622,
+    "precision": 0.878,
+    "recall": 0.9114,
+    "f1": 0.8944,
+    "roc_auc": 0.9879
+  },
+  "calibration_metrics": {
+    "brier_score": 0.0372,
+    "expected_calibration_error": 0.0466,
+    "confusion_matrix": {
+      "true_negatives": 361,
+      "false_positives": 10,
+      "false_negatives": 7,
+      "true_positives": 72
+    },
+    "calibration_assessment": "Brier score of 0.0372 and ECE of 0.0466 reflect good probabilistic calibration on synthetic data. Standard tree ensembles produce vote fractions that can be slightly conservative near extreme boundaries; probabilities reflect synthetic behavior and are not validated for real institutional certainty."
+  },
+  "preprocessing_configuration": {
+    "numeric_bounds": {
+      "task_completion": [
+        0.0,
+        100.0
+      ],
+      "report_submission": [
+        0.0,
+        100.0
+      ],
+      "mentor_feedback": [
+        0.0,
+        100.0
+      ],
+      "task_velocity": [
+        0.0,
+        10.0
+      ],
+      "report_punctuality": [
+        0.0,
+        100.0
+      ],
+      "days_since_last_activity": [
+        0,
+        365
+      ],
+      "activity_consistency": [
+        0.0,
+        100.0
+      ],
+      "days_remaining": [
+        0,
+        365
+      ]
+    },
+    "imputation_defaults": {
+      "mentor_feedback": 75.0,
+      "report_punctuality": 100.0,
+      "days_since_last_activity": 14,
+      "days_remaining": 30
+    },
+    "trend_categories": [
+      "DECLINING",
+      "IMPROVING",
+      "INSUFFICIENT_DATA",
+      "STABLE"
+    ]
+  },
+  "features_used": [
+    "task_completion",
+    "report_submission",
+    "mentor_feedback",
+    "task_velocity",
+    "report_punctuality",
+    "days_since_last_activity",
+    "activity_consistency",
+    "days_remaining",
+    "trend_declining",
+    "trend_improving",
+    "trend_insufficient_data",
+    "trend_stable"
+  ],
+  "trained_at_utc": "2026-09-28T17:56:53.102253+00:00",
+  "disclaimer": "Model trained on synthetic demonstration data. The model is evaluated on synthetic demonstration data generated from simulated internship behavior patterns. These metrics demonstrate pipeline behavior and do not establish real-world predictive validity."
+}

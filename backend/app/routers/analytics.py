@@ -102,4 +102,6 @@ def simulate_progress_evaluation(
         factors=payload,
         reasons=engine_result.reasons,
         recommendations=engine_result.recommendations,
+        progress_health_score=float(engine_result.score),
+        progress_trend=getattr(engine_result, "trend", "STABLE"),
     )

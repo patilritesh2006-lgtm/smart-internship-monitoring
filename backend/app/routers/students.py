@@ -26,7 +26,7 @@ from backend.app.schemas import (
     WeeklyReportCreate,
     WeeklyReportOut,
 )
-from intelligence.app import evaluate_progress_attention
+from intelligence.app import evaluate_progress_attention, extract_progress_features
 
 router = APIRouter(prefix="/students", tags=["Students"])
 
@@ -269,52 +269,70 @@ def compute_student_attention_metrics(student_id: int, db: Session) -> ProgressA
 
     now = datetime.now(timezone.utc)
 
-    # 1. Task Completion (30%)
-    total_tasks = len(tasks)
-    completed_tasks = sum(1 for t in tasks if t.is_completed)
-    task_completion = round((completed_tasks / total_tasks * 100.0), 1) if total_tasks > 0 else 100.0
+    # Extract clean, typed features from database records (no double-counting)
+    features = extract_progress_features(
+        tasks=tasks,
+        reports=reports,
+        internship=internship,
+        now=now,
+    )
 
-    # 2. Report Submission (20%)
-    if internship and internship.start_date:
-        start_date = internship.start_date
-        if start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=timezone.utc)
-        days_active = max(1, (now - start_date).days)
-        expected_weeks = min(max(1, (days_active // 7) + 1), internship.duration_weeks)
-    else:
-        expected_weeks = max(1, len(reports))
+    # Evaluate progress health through the Hybrid Intelligence Engine (deterministic + ML early-warning)
+    try:
+        from intelligence.app.ml import evaluate_hybrid_attention
+        hybrid_result = evaluate_hybrid_attention(features)
+        att_score = float(hybrid_result["attention_score"])
+        att_status = str(hybrid_result["attention_status"])
+        eval_reasons = hybrid_result["reasons"]
+        eval_recommendations = hybrid_result["recommendations"]
+        health_score = float(hybrid_result["progress_health_score"])
+        trend_val = str(hybrid_result["progress_trend"])
+        risk_prob = hybrid_result.get("risk_probability")
+        risk_lbl = hybrid_result.get("risk_label")
+        mod_version = hybrid_result.get("model_version")
+        mod_available = hybrid_result.get("model_available", False)
+        top_factors = hybrid_result.get("top_risk_factors")
+    except Exception:
+        # Transparent fallback to deterministic engine if ML is unavailable
+        engine_result = evaluate_progress_attention(features)
+        att_score = float(engine_result.score)
+        att_status = str(engine_result.status)
+        eval_reasons = engine_result.reasons
+        eval_recommendations = engine_result.recommendations
+        health_score = float(engine_result.score)
+        trend_val = features.progress_trend.value
+        risk_prob = None
+        risk_lbl = None
+        mod_version = None
+        mod_available = False
+        top_factors = None
 
-    reports_submitted = len(reports)
-    report_submission = min(100.0, round((reports_submitted / expected_weeks * 100.0), 1))
-
-    # 3. Mentor Feedback (20%)
-    reviewed_reports = [r for r in reports if r.mentor_score is not None]
-    if reviewed_reports:
-        mentor_feedback = round(sum(r.mentor_score for r in reviewed_reports) / len(reviewed_reports), 1)
-    else:
-        mentor_feedback = 75.0  # neutral initial baseline until reviewed
-
-    # 4. Progress Consistency (30%)
-    # Computed from balanced milestone execution and submission rate
-    progress_consistency = min(100.0, round((task_completion * 0.5 + report_submission * 0.5), 1))
-
-    # Run through the deterministic Intelligence Engine!
-    engine_result = evaluate_progress_attention({
-        "progress_consistency": progress_consistency,
-        "task_completion": task_completion,
-        "report_submission": report_submission,
-        "mentor_feedback": mentor_feedback,
-    })
+    # Mentor feedback float for factors breakdown
+    mf_val = features.mentor_feedback if features.mentor_feedback is not None else 75.0
 
     return ProgressAttentionResponseSchema(
-        attention_score=float(engine_result.score),
-        attention_status=str(engine_result.status),
+        attention_score=att_score,
+        attention_status=att_status,
         factors=ProgressFactorBreakdown(
-            progress_consistency=progress_consistency,
-            task_completion=task_completion,
-            report_submission=report_submission,
-            mentor_feedback=mentor_feedback,
+            progress_consistency=float(features.activity_consistency),
+            task_completion=float(features.task_completion),
+            report_submission=float(features.report_submission),
+            mentor_feedback=float(mf_val),
+            attendance_rate=features.attendance_rate,
+            task_velocity=float(features.task_velocity),
+            report_punctuality=float(features.report_punctuality) if features.report_punctuality is not None else None,
+            days_since_last_activity=features.days_since_last_activity,
+            activity_consistency=float(features.activity_consistency),
+            progress_trend=trend_val,
+            days_remaining=features.days_remaining,
         ),
-        reasons=engine_result.reasons,
-        recommendations=engine_result.recommendations,
+        reasons=eval_reasons,
+        recommendations=eval_recommendations,
+        progress_health_score=health_score,
+        progress_trend=trend_val,
+        risk_probability=risk_prob,
+        risk_label=risk_lbl,
+        model_version=mod_version,
+        model_available=mod_available,
+        top_risk_factors=top_factors,
     )

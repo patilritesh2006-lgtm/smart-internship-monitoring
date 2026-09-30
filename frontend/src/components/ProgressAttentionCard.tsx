@@ -28,6 +28,17 @@ export interface ProgressFactorBreakdown {
   mentor_feedback?: number;
 }
 
+export interface RiskFactorItem {
+  feature: string;
+  label: string;
+  impact: string; // "HIGH" | "MEDIUM" | "LOW"
+  direction: string; // "RISK" | "PROTECTIVE"
+  value?: any;
+  unit?: string;
+  attribution_weight?: number;
+  description?: string;
+}
+
 export interface ProgressAttentionCardProps {
   score: number;
   status: string; // "ON_TRACK" | "MONITOR" | "NEEDS_ATTENTION"
@@ -40,6 +51,11 @@ export interface ProgressAttentionCardProps {
   className?: string;
   onActionClick?: () => void;
   actionLabel?: string;
+  risk_probability?: number | null;
+  risk_label?: string | null;
+  model_version?: string | null;
+  model_available?: boolean;
+  top_risk_factors?: RiskFactorItem[];
 }
 
 export function ProgressAttentionCard({
@@ -54,6 +70,11 @@ export function ProgressAttentionCard({
   className = "",
   onActionClick,
   actionLabel,
+  risk_probability,
+  risk_label,
+  model_version,
+  model_available,
+  top_risk_factors,
 }: ProgressAttentionCardProps) {
   const [showExplainer, setShowExplainer] = useState(false);
 
@@ -291,6 +312,71 @@ export function ProgressAttentionCard({
                 />
               </div>
             </div>
+          </div>
+        )}
+
+        {/* ML Early-Warning Intelligence & Contributing Factors (Phase 3) */}
+        {model_available && risk_probability !== undefined && risk_probability !== null && (
+          <div className="mt-4 pt-3 border-t border-slate-100">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <Sparkles size={13} className="text-indigo-600" />
+                <span>Predicted Attention Risk</span>
+              </span>
+              <span
+                className={`px-2 py-0.5 rounded text-[11px] font-extrabold ${
+                  risk_probability >= 0.50
+                    ? "bg-rose-100 text-rose-800 border border-rose-200"
+                    : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                }`}
+              >
+                {Math.round(risk_probability * 100)}% Probability
+              </span>
+            </div>
+
+            {/* Top Influential Factors (SHAP Local Attribution) */}
+            {top_risk_factors && top_risk_factors.length > 0 && (
+              <div className="space-y-1.5 mt-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Contributing Factors (Evidence)
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {top_risk_factors.map((f, i) => (
+                    <div
+                      key={i}
+                      className={`p-2 rounded-lg border text-xs flex items-center justify-between gap-2 ${
+                        f.direction === "RISK"
+                          ? "bg-rose-50/50 border-rose-200/60 text-slate-800"
+                          : "bg-emerald-50/50 border-emerald-200/60 text-slate-800"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                          f.direction === "RISK"
+                            ? "bg-rose-100 text-rose-700 font-mono"
+                            : "bg-emerald-100 text-emerald-700 font-mono"
+                        }`}>
+                          {f.direction === "RISK" ? "Risk" : "Protective"}
+                        </span>
+                        <span className="font-semibold truncate text-[11px]" title={f.description}>
+                          {f.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0 text-[11px]">
+                        {f.value !== undefined && f.value !== null && (
+                          <strong className="font-mono text-slate-700">
+                            {f.value}{f.unit || ""}
+                          </strong>
+                        )}
+                        <span className="text-[9px] font-bold uppercase tracking-wider px-1 py-0.2 rounded bg-slate-200/80 text-slate-600">
+                          {f.impact}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
