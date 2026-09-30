@@ -81,10 +81,10 @@ The canonical feature set mirrors the 10 progress intelligence features defined 
 Implemented in [`intelligence/app/ml/model.py`](file:///intelligence/app/ml/model.py):
 1. **Data Ingestion:** Calls `generate_synthetic_dataset(3000, random_seed=42)`.
 2. **Preprocessing:** [`MLPreprocessor`](file:///intelligence/app/ml/preprocessing.py) validates bounds, imputes missing values, and one-hot encodes `progress_trend`.
-3. **Data Splitting:** Stratified splitting ensures identical class ratios:
-   - **Training Set (70%):** 2,100 observations
-   - **Validation Set (15%):** 450 observations
-   - **Held-out Test Set (15%):** 450 observations
+3. **Data Splitting:** Group-aware synthetic student split via `GroupShuffleSplit` across 600 unique synthetic students (preventing longitudinal data leakage across checkpoints):
+   - **Training Set (70%):** 420 students (2,100 observations)
+   - **Validation Set (15%):** 90 students (450 observations)
+   - **Held-out Test Set (15%):** 90 students (450 observations)
 4. **Reproducible Training Command:**
    ```bash
    python -m intelligence.app.ml.model
@@ -109,17 +109,18 @@ We evaluated candidate scikit-learn algorithms:
 
 ## 7. Evaluation Metrics
 
-Evaluated on the held-out 450-sample test set:
+Evaluated on the held-out 450-sample test set from the synthetic demonstration dataset:
 
 | Metric | Score | Target Rationale |
 | :--- | :--- | :--- |
-| **Accuracy** | 96.22% | General classification performance across both cohorts |
-| **Precision** | 92.86% | Avoids alert fatigue for faculty supervisors |
-| **Recall (Attention Risk)** | **90.10%** | Critical: prioritizes catching students needing attention |
-| **F1-Score** | 91.46% | Harmonic balance between precision and recall |
-| **ROC-AUC** | 0.9893 | Strong discriminative ability across decision thresholds |
+| **Accuracy** | 95.78% | General classification performance on synthetic cohort distribution |
+| **Precision** | 85.71% | Avoids alert fatigue for faculty supervisors on synthetic data |
+| **Recall (Attention Risk)** | **91.14%** | Critical: prioritizes catching students needing attention |
+| **F1-Score** | 88.34% | Harmonic balance between precision and recall |
+| **ROC-AUC** | **0.9874** (98.74%) | High discriminative ability across decision thresholds on synthetic demonstration data |
 
-*Note: These metrics evaluate performance on synthetic demonstration data. They verify pipeline mechanics, not real-world institutional efficacy.*
+> ⚠️ **Evaluation Scope:** These metrics are from synthetic demonstration data and do not establish real-world predictive validity. The **98.74% ROC-AUC** metric is achieved exclusively on synthetic demonstration data generated from simulated internship behavior distributions. It confirms pipeline correctness and probabilistic separation under controlled simulation; it does **not** establish real-world predictive validity for institutional student failure or retention.
+
 
 ---
 
@@ -130,7 +131,7 @@ The service API provides:
 {
   "risk_probability": 0.78,
   "risk_label": "ATTENTION_RISK",
-  "model_version": "synthetic-v1",
+  "model_version": "synthetic-v1.1",
   "model_available": true
 }
 ```
@@ -235,7 +236,7 @@ Implemented in [`intelligence/app/ml/service.py`](file:///intelligence/app/ml/se
 The system is designed with **zero hard dependencies on the ML model**:
 - If `intelligence/app/ml/artifacts/risk_model_v1.joblib` is deleted, corrupted, or unreadable:
   1. `RiskPredictor` logs a warning and sets `model_available = False`.
-  2. `evaluate_hybrid_attention` seamlessly falls back to 100% deterministic evaluation.
+  2. `evaluate_hybrid_attention` seamlessly falls back to deterministic evaluation.
   3. API response returns `model_available: false`, `risk_probability: null`, `top_risk_factors: []`.
   4. All legacy endpoints (`/api/students/me/attention`, `/api/mentors/assigned-students`) continue operating with zero downtime.
 

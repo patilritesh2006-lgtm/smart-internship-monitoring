@@ -14,7 +14,7 @@ def get_current_user(
     db: Session = Depends(get_db),
 ) -> User:
     """Validates the JWT Bearer token and returns the current User object."""
-    if not auth or not auth.credentials:
+    if not auth or not auth.credentials or not auth.credentials.strip():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication token required",

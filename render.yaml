@@ -30,4 +30,5 @@ services:
       - key: NODE_VERSION
         value: 18.20.0
       - key: NEXT_PUBLIC_API_URL
-        value: "http://localhost:8000/api"
+        # Set to your deployed backend URL + /api (e.g. https://eduintern-backend.onrender.com/api)
+        value: "https://eduintern-backend.onrender.com/api"

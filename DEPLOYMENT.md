@@ -18,7 +18,7 @@ graph TD
         ReverseProxy -->|Proxy Pass /api & /health| ASGI["Uvicorn / Gunicorn ASGI Workers (Port 8000)"]
         ASGI --> FastAPIEngine["FastAPI Core Engine"]
         FastAPIEngine --> AuthModule["PyJWT + Bcrypt Auth"]
-        FastAPIEngine --> IntelligenceModule["Deterministic Analytics Engine"]
+        FastAPIEngine --> IntelligenceModule["Explainable Hybrid Intelligence (Deterministic + ML Early-Warning + SHAP)"]
     end
 
     subgraph Database Tier

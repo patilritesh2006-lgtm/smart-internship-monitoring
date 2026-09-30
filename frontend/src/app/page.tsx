@@ -168,7 +168,7 @@ export default function HomePage() {
         {/* Top Feature Pill Tag */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50/90 border border-blue-200/80 text-blue-700 text-xs font-bold tracking-wide mb-6 shadow-2xs">
           <Sparkles size={13} className="text-blue-600 animate-pulse" />
-          <span>Internship Intelligence Platform</span>
+          <span>Explainable Hybrid Early-Warning Intelligence</span>
           <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
         </div>
 
@@ -182,9 +182,7 @@ export default function HomePage() {
 
         {/* Hero Subtitle */}
         <p className="text-sm sm:text-base text-slate-500 max-w-2xl mx-auto mb-8 sm:mb-10 leading-relaxed font-normal">
-          One secure institutional platform to streamline internship approval workflows, monitor
-          verified student milestones, collect compliance evidence, and power proactive early
-          interventions.
+          Smart Internship Management &amp; Monitoring System (SIMMS) is an institutional internship lifecycle platform with an explainable hybrid early-warning intelligence engine. Streamline approval workflows, monitor verified student milestones, and power proactive early interventions.
         </p>
 
         {/* Main Hero CTA Buttons */}
@@ -208,24 +206,28 @@ export default function HomePage() {
         {/* Trust Badges Strip */}
         <div className="pt-2 pb-2">
           <p className="text-[10.5px] font-bold text-slate-400 uppercase tracking-wider mb-3">
-            BUILT FOR STUDENTS, FACULTY MENTORS, COORDINATORS, AND ENTERPRISE INSTITUTIONS
+            ROLE-BASED WORKSPACES FOR STUDENTS, FACULTY MENTORS, AND INSTITUTIONAL COORDINATORS
           </p>
           <div className="flex items-center justify-center gap-2 sm:gap-4 flex-wrap text-xs font-semibold text-slate-600">
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200/80 shadow-2xs">
               <ShieldCheck size={14} className="text-blue-600" />
-              ABET Compliant
+              RBAC Enabled
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200/80 shadow-2xs">
-              <Award size={14} className="text-indigo-600" />
-              AACSB Ready
+              <Lock size={14} className="text-indigo-600" />
+              JWT Authentication
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200/80 shadow-2xs">
-              <Lock size={14} className="text-emerald-600" />
-              SOC2 Type II
+              <Activity size={14} className="text-emerald-600" />
+              Hybrid Early-Warning Engine
             </span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200/80 shadow-2xs">
-              <Building2 size={14} className="text-purple-600" />
-              NAAC Certified
+              <Compass size={14} className="text-purple-600" />
+              Explainable Intelligence
+            </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-slate-200/80 shadow-2xs">
+              <Building2 size={14} className="text-amber-600" />
+              PostgreSQL Ready
             </span>
           </div>
         </div>
@@ -233,6 +235,19 @@ export default function HomePage() {
 
       {/* ── 3. Product Showcase (Stitch Liquid Glass Mockup Card) ── */}
       <section id="overview" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mb-20">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 px-1">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider">
+              Product Preview
+            </span>
+            <span className="text-xs text-slate-500 font-medium">
+              Interactive interface demo with sample data
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-400 font-medium">
+            Sample demonstration preview (not real institutional records)
+          </span>
+        </div>
         <div className="rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xl backdrop-blur-xl overflow-hidden transition-all">
           
           <div className="grid grid-cols-1 lg:grid-cols-12 min-h-[560px]">
@@ -247,7 +262,7 @@ export default function HomePage() {
                   </div>
                   <div>
                     <span className="text-xs font-bold text-slate-800 tracking-tight block">EduIntern Core</span>
-                    <span className="text-[9px] font-semibold text-slate-400 block tracking-wider uppercase">ACADEMIC HUB</span>
+                    <span className="text-[9px] font-semibold text-slate-400 block tracking-wider uppercase">DEMO PREVIEW</span>
                   </div>
                 </div>
 
@@ -342,14 +357,14 @@ export default function HomePage() {
                   <input
                     type="text"
                     readOnly
-                    value="Filter: Active Spring 2026 Cohort"
+                    value="Filter: Sample Spring 2026 Cohort (Demo Data)"
                     className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200/80 rounded-full text-xs text-slate-700 font-medium cursor-default focus:outline-none"
                   />
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/70 text-blue-700 text-[11px] font-bold">
                     <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
-                    Spring 2026 Active Cycle
+                    Sample 2026 Cohort Preview
                   </span>
                   <div className="relative p-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600">
                     <Bell size={14} />
@@ -408,10 +423,10 @@ export default function HomePage() {
                   <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
                     <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                       <Layers size={14} className="text-blue-600" />
-                      Cohort Milestone Velocity &amp; Student Progress
+                      Cohort Milestone Velocity &amp; Student Progress (Sample Data)
                     </span>
                     <Link href="/login" className="text-[11px] font-bold text-blue-600 hover:underline">
-                      View All 342 →
+                      View Sample Cohort →
                     </Link>
                   </div>
 
@@ -542,7 +557,7 @@ export default function HomePage() {
                     <div className="flex items-center justify-between mb-1.5">
                       <span className="text-xs font-bold text-rose-900 flex items-center gap-1.5">
                         <AlertTriangle size={14} className="text-rose-600" />
-                        Explainable Early Warning
+                        Explainable Early Warning (Sample Risk Alert)
                       </span>
                       <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-600 text-white tracking-wider uppercase">
                         CRITICAL
@@ -552,7 +567,7 @@ export default function HomePage() {
                       Aarav Kulkarni (ID: 84920)
                     </p>
                     <p className="text-[10.5px] text-slate-600 leading-snug mb-2.5">
-                      Weekly milestone logbook overdue by 4 days. No faculty mentor sign-off detected since Friday 18:00.
+                      Weekly milestone logbook overdue by 4 days. Sample simulation demonstrating early-warning flags.
                     </p>
                     <div className="flex items-center justify-between pt-1 border-t border-rose-200/60">
                       <span className="text-[10px] font-bold text-rose-700">
@@ -572,7 +587,7 @@ export default function HomePage() {
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                         <Radio size={13} className="text-blue-600 animate-pulse" />
-                        Institutional Audit Feed
+                        Institutional Audit Feed (Sample Stream)
                       </span>
                       <span className="text-[9.5px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
                         Live Sync
@@ -723,7 +738,7 @@ export default function HomePage() {
           {/* Top Pill */}
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-blue-200/80 text-blue-700 text-xs font-bold mb-4 shadow-2xs">
             <ShieldCheck size={14} className="text-blue-600" />
-            <span>Accreditation Ready Platform</span>
+            <span>Auditable Academic Workflows</span>
           </div>
 
           {/* Banner Headline */}
@@ -733,8 +748,8 @@ export default function HomePage() {
 
           {/* Banner Subtitle */}
           <p className="text-xs sm:text-sm text-slate-500 max-w-xl mx-auto mb-8 leading-relaxed">
-            Explore an authoritative connected workspace for internship progress, authenticated
-            evidence, proactive monitoring, and certified academic outcomes.
+            Explore an authoritative connected workspace for internship progress, verified
+            evidence, proactive monitoring, and verifiable academic outcomes.
           </p>
 
           {/* CTA Buttons */}
@@ -772,7 +787,7 @@ export default function HomePage() {
 
             <div className="flex items-center gap-5 sm:gap-6 font-semibold text-[11.5px] text-slate-600">
               <a href="#overview" className="hover:text-blue-600 transition-colors">Privacy Charter</a>
-              <a href="#overview" className="hover:text-blue-600 transition-colors">FERPA &amp; GDPR</a>
+              <a href="#overview" className="hover:text-blue-600 transition-colors">Academic Privacy Standards</a>
               <a href="#overview" className="hover:text-blue-600 transition-colors">Security Audit</a>
               <a href="#overview" className="hover:text-blue-600 transition-colors">Documentation</a>
             </div>
@@ -786,11 +801,11 @@ export default function HomePage() {
             <div className="flex items-center gap-4">
               <span className="inline-flex items-center gap-1.5 text-emerald-600 font-semibold">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                All Institutional Services Active
+                All Demonstration Services Active
               </span>
               <span className="inline-flex items-center gap-1">
                 <Lock size={12} className="text-slate-400" />
-                EduIntern Academic Consortium
+                Role-Based Access Protected
               </span>
             </div>
           </div>

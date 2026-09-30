@@ -65,7 +65,7 @@ export function ProgressAttentionCard({
   reasons = [],
   recommendations = [],
   title = "Progress Analysis",
-  subtitle = "Deterministic 4-Factor Monitoring Engine",
+  subtitle = "Explainable Hybrid Early-Warning Engine",
   showBreakdown = true,
   className = "",
   onActionClick,

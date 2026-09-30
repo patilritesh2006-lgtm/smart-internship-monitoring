@@ -44,9 +44,11 @@ The platform centralizes the complete lifecycle of university internships while 
 A unified, database-backed platform providing:
 - Role-based portals for **Students**, **Mentors**, and **Administrators**.
 - Centralized internship application, approval, and task/report tracking.
-- An independent, deterministic **Intelligence Layer** providing:
+- An **Explainable Hybrid Early-Warning Intelligence Layer** providing:
   - **Skill Gap Analysis:** Match percentage, missing skills list, and specific improvement recommendations.
-  - **Progress Attention Scoring:** 4-factor explainable evaluation alerting supervisors to students needing follow-up.
+  - **Progress Health Baseline:** 4-factor explainable evaluation alerting supervisors to students needing follow-up.
+  - **ML Early-Warning Risk Prediction:** Machine learning early-warning signal flagging subtle disengagement patterns before deadlines are missed.
+  - **SHAP Feature Explainability:** Local feature attributions showing directional drivers and plain-language institutional reasons.
 
 ---
 

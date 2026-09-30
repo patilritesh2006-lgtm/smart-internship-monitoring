@@ -1,23 +1,47 @@
-# Automated E2E Testing Documentation (Playwright)
+# Automated Testing Documentation (Pytest & Playwright)
 
 ## Overview
 
-The **Smart Internship Management & Monitoring System (SIMMS)** includes a complete, production-quality automated End-to-End (E2E) testing suite powered by [Playwright](https://playwright.dev/).
-
-The testing system verifies actual application workflows, role-based access security, deterministic AI intelligence engine analytics, form submissions, and database state across all core personas (**Student**, **Faculty Mentor**, and **Administrator**).
+The **Smart Internship Management & Monitoring System (SIMMS / EduIntern)** maintains a comprehensive, dual-tiered automated testing architecture:
+1. **Pytest Suite:** 75 fast unit, integration, ML pipeline, and contract verification tests covering the FastAPI backend, SQLAlchemy ORM, deterministic 4-factor scoring, Scikit-Learn early-warning model, and SHAP explainability engine.
+2. **Playwright E2E Suite:** 118 unique end-to-end browser specifications (354 cross-browser executions) verifying complete real-world user workflows, RBAC guards, security tamper resistance, responsiveness, and database lifecycle persistence.
 
 ---
 
-## Test Suite Architecture
+## 1. Pytest Automated Test Suite (75 Tests)
 
-The test suite is structured cleanly into 13 modular categories with reusable Page Object Models, custom fixtures, and isolated test data generators:
+The pytest suite verifies the core business logic, API endpoints, and intelligence layer in 14–16 seconds.
+
+### Test Breakdown by Subsystem
+
+| Test Suite File | Subsystem | Tests | Status | Scope |
+| :--- | :--- | :---: | :---: | :--- |
+| `backend/tests/test_api_integration.py` | FastAPI Backend | **23** | ✅ PASS | Auth registration/login, RBAC 403s, task toggling, report submissions, mentor reviews, live attention calculation, triage sorting, duplicate conflict handling (409). |
+| `intelligence/tests/test_ml_pipeline.py` | ML Early-Warning & SHAP | **21** | ✅ PASS | Synthetic dataset distributions, preprocessor bounds and one-hot encoding, RandomForest training and calibration, SHAP feature attributions, hybrid decision invariants (inactivity override, ML escalation), deterministic fallback. |
+| `intelligence/tests/test_progress_analysis.py` | Deterministic Progress Core | **17** | ✅ PASS | 4-factor linear scoring math, boundary clamps $[0, 100]$, division-by-zero protection, threshold status transitions, input validation, reason deduplication. |
+| `intelligence/tests/test_skill_gap.py` | Skill Gap Algebra | **14** | ✅ PASS | Case insensitivity, whitespace trimming, set deduplication, zero required skills edge case, rule-based recommendations, batch pandas DataFrame analytics. |
+| **TOTAL** | **Full Pytest Suite** | **75** | ✅ **75/75 (100%)** | Zero failures, zero skips across all 4 suites. |
+
+### Running Pytest
+
+```powershell
+# From repository root with virtual environment:
+venv\Scripts\python -m pytest backend/tests intelligence/tests -v
+```
+
+---
+
+## 2. Playwright Automated E2E Test Suite (118 Tests)
+
+### Test Architecture
+
+The E2E suite is structured cleanly into 14 modular categories with reusable Page Object Models, custom fixtures, and isolated test data generators:
 
 ```text
 smart-internship-management/
 ├── package.json                   # Root package with test:e2e runner scripts
 ├── playwright.config.ts           # Multi-browser, webServer, and reporter configuration
 ├── playwright-report/             # Self-contained visual HTML test reports
-│   └── index.html
 ├── tests/
 │   ├── fixtures/                  # Reusable test utilities & page objects
 │   │   ├── test-data.ts           # Pre-seeded credentials & dynamic test generators
@@ -41,187 +65,79 @@ smart-internship-management/
 │   ├── responsive/                # Desktop, Tablet & Mobile drawer testing (6 tests)
 │   ├── error-handling/            # Fault tolerance, bad input & network errors (5 tests)
 │   ├── accessibility/             # Form labels, aria attributes & keyboard navigation (5 tests)
-│   └── workflows/                 # Complete end-to-end multi-role journeys (4 tests)
+│   ├── workflows/                 # Complete end-to-end multi-role journeys (4 tests)
+│   └── security/security-audit.spec.ts # Deep security, brute force, XSS & privilege tests (39 tests)
 ```
+
+### Playwright Test Statistics
+
+| Category | Suite | Test Cases | Scope / Highlights |
+| :--- | :--- | :---: | :--- |
+| **A** | Startup & Health Checks | 5 | Backend `/health`, frontend HTTP 200, zero console errors, branding, meta SEO. |
+| **B** | Authentication & Session Management | 9 | Quick-login personas, JWT storage, credential validation, logout cleanup. |
+| **C** | Navigation & Route Protection | 7 | Cross-role redirection, unauthenticated bouncing, 404 handling, browser back/forward. |
+| **D** | UI Components & Visual Elements | 6 | GlassCard render, status badges, hero banner, interactive preview tabs, modal open. |
+| **E** | Form Controls & Interactive Inputs | 7 | Dynamic task toggling, weekly report inputs, skill additions, radio selectors. |
+| **F** | Real Application CRUD Operations | 6 | Live task creation/toggling, report submission, mentor review score persistence. |
+| **G** | Backend REST API Integration | 8 | Direct API calls verifying JWT headers, JSON contracts, and intelligence payloads. |
+| **H** | Input Validation & Boundary Checks | 6 | Malformed email formats, password length rules, required inputs, whitespace trimming. |
+| **I** | Role-Based Access Control | 5 | Student $\to$ Admin blocked, Mentor $\to$ Admin blocked, token manipulation safety. |
+| **J** | Responsive & Multi-Viewport Testing | 6 | Mobile viewport (375px), Tablet (768px), Desktop (1280px), slide-in mobile drawer. |
+| **K** | Error Handling & Fault Tolerance | 5 | Network error resiliency, invalid route recovery, backend offline handling. |
+| **L** | Accessibility (a11y) & Usability | 5 | Label associations, ARIA roles, tab order, focus rings, minimum tap targets ($\ge 44\text{px}$). |
+| **M** | End-to-End User Workflows | 4 | Multi-role journeys: Student submit $\to$ Mentor review $\to$ Admin approve. |
+| **N** | Deep Security Audit Suite | 39 | Login rate limiting, SQLi/XSS payloads, admin registration blocking, parameter pollution. |
+| **TOTAL** | **Unique Test Cases** | **118** | **118 unique test specifications in 14 spec files** |
+| **MATRIX**| **Cross-Browser Executions** | **354** | **118 tests &times; 3 browser targets (Chromium, Firefox, Mobile Chrome)** |
 
 ---
 
-## Test Statistics
+## 3. Quick Start Guide
 
-| Category | Suite | Test Cases | Status |
-| :--- | :--- | :--- | :--- |
-| **A** | Startup & Health Checks | 5 | ✅ PASSED |
-| **B** | Authentication & Session Management | 9 | ✅ PASSED |
-| **C** | Navigation & Route Protection | 7 | ✅ PASSED |
-| **D** | UI Components & Visual Elements | 6 | ✅ PASSED |
-| **E** | Form Controls & Interactive Inputs | 7 | ✅ PASSED |
-| **F** | Real Application CRUD Operations | 6 | ✅ PASSED |
-| **G** | Backend REST API Integration | 8 | ✅ PASSED |
-| **H** | Input Validation & Boundary Checks | 6 | ✅ PASSED |
-| **I** | Role-Based Access Control & Security | 5 | ✅ PASSED |
-| **J** | Responsive & Multi-Viewport Testing | 6 | ✅ PASSED |
-| **K** | Error Handling & Fault Tolerance | 5 | ✅ PASSED |
-| **L** | Accessibility (a11y) & Usability Checks | 5 | ✅ PASSED |
-| **M** | End-to-End User Workflows | 4 | ✅ PASSED |
-| **TOTAL** | **Comprehensive Full Suite** | **79** | **79 / 79 PASSED (100%)** |
+### Prerequisites
+- Node.js 18+ & npm
+- Python 3.10+ (Tested with Python 3.14)
 
----
+### Running Playwright Tests
 
-## Quick Start Guide for Beginners
-
-### 1. Prerequisites
-
-Ensure you have Node.js (v18+) and Python (v3.10+) installed on your machine.
+From the project root:
 
 ```powershell
-node -v
-npm -v
-python --version
-```
-
-### 2. Install Dependencies
-
-From the project root (`smart-internship-management`):
-
-```powershell
-# Install root Playwright test runner dependencies
-npm install
-
-# Install Playwright browser engines
-npx playwright install chromium
-```
-
-### 3. Run the Backend & Frontend
-
-Playwright is configured with automated `webServer` detection and will reuse already running servers or launch them automatically.
-
-To start them manually if desired:
-
-**Terminal 1 (Backend):**
-```powershell
-.\venv\Scripts\python.exe -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
-```
-
-**Terminal 2 (Frontend):**
-```powershell
-npm run start --prefix frontend
-# or
-npm run dev --prefix frontend
-```
-
----
-
-## Running the Tests
-
-All commands can be run directly from the project root directory:
-
-### Run All 79 Tests Headless
-```powershell
-npm run test:e2e
-# or
+# 1. Recommended: Fast Chromium-only run (118 tests)
 npm run test:e2e:chromium
-```
+# or: npx playwright test --project=chromium
 
-### Run Tests with Interactive UI Mode
-Allows step-by-step visual inspection, DOM time travel, and locator playground:
-```powershell
+# 2. Run with Interactive Visual UI mode (recommended for debugging)
 npm run test:e2e:ui
-```
 
-### Run Tests in Headed Browser
-Watch the real Chrome browser open and interact with the pages:
-```powershell
-npm run test:e2e:headed
-```
+# 3. Run full cross-browser matrix (354 tests across Chromium, Firefox, Mobile Chrome)
+npm run test:e2e
 
-### Run Tests in Debug Mode
-Opens the Playwright Inspector with breakpoints:
-```powershell
-npm run test:e2e:debug
-```
-
-### View Interactive HTML Test Report
-```powershell
+# 4. View generated HTML visual test report
 npm run test:e2e:report
-# or
-npx playwright show-report
 ```
 
----
-
-## Running Specific Test Suites
+### Running Specific Test Categories
 
 ```powershell
-# Run only Authentication tests
-npx playwright test tests/auth
-
-# Run only REST API integration tests
-npx playwright test tests/api
-
-# Run only End-to-End User Workflows
-npx playwright test tests/workflows
-
-# Run only CRUD operations tests
-npx playwright test tests/crud
-
-# Run only Responsive multi-device tests
-npx playwright test tests/responsive
-
-# Run a single specific test file
+# Run only Health & Startup checks
 npx playwright test tests/health/health.spec.ts
+
+# Run only Security Audit tests (39 tests)
+npx playwright test tests/security/security-audit.spec.ts
+
+# Run only End-to-End Workflows
+npx playwright test tests/workflows/workflows.spec.ts
+
+# Run only Authentication tests
+npx playwright test tests/auth/auth.spec.ts
 ```
 
 ---
 
-## How to Change the Base URL
+## 4. Quality & Reliability Invariants
 
-By default, tests run against `http://localhost:3000`. You can point tests to an alternative host or port using the `PLAYWRIGHT_TEST_BASE_URL` environment variable:
-
-```powershell
-$env:PLAYWRIGHT_TEST_BASE_URL="http://localhost:3001"
-npx playwright test
-```
-
----
-
-## How to Add a New Test
-
-1. Pick or create a category folder under `tests/` (e.g. `tests/forms/my-feature.spec.ts`).
-2. Import `test` and `expect` from `@playwright/test`.
-3. Utilize existing Page Objects from `tests/fixtures/page-objects/` or demo accounts from `tests/fixtures/test-data.ts`.
-4. Example:
-
-```typescript
-import { test, expect } from '@playwright/test';
-import { LoginPage } from '../fixtures/page-objects/LoginPage';
-import { DEMO_USERS } from '../fixtures/test-data';
-
-test('Verify student portal title', async ({ page }) => {
-  const loginPage = new LoginPage(page);
-  await loginPage.goto();
-  await loginPage.quickLoginAs('student');
-  await page.waitForURL('**/student');
-  await expect(page).toHaveTitle(/EduIntern|SIMMS/i);
-});
-```
-
----
-
-## Application Issues Discovered & Fixed During Integration
-
-1. **Missing Backend Dependency (`email-validator`)**:
-   - *Issue*: Pydantic schemas in `backend/app/schemas` use `EmailStr`. The virtual environment lacked `email-validator` causing FastAPI startup failure.
-   - *Fix*: Installed `email-validator` into `venv` (`pip install email-validator`), matching `requirements.txt`.
-
-2. **Client-Side Registration SPA Desynchronization**:
-   - *Issue*: In `frontend/src/app/register/page.tsx`, successful registration stored authentication tokens into `localStorage` and called client-side `router.push('/student')`. Because `AuthContext` was not mounted or updated in-memory, the destination portal detected `user === null` and bounced the new user straight back to `/login`.
-   - *Fix*: Updated `register/page.tsx` to use full window navigation (`window.location.href`), ensuring `AuthContext` initializes with the new session immediately.
-
----
-
-## Quality Highlights
-
-- **Zero Fragile Selectors**: Semantic queries (`getByRole`, `getByLabel`, `getByPlaceholder`, `getByText`) and stable class boundaries.
-- **No Arbitrary Sleep Timers**: Tests rely on Playwright auto-waiting, `waitForURL`, and locator visibility assertions.
-- **Safe Test Isolation**: Generated test records use unique timestamps (`test.student.<timestamp>@university.edu`) preventing collision or destruction of pre-seeded evaluation demo data.
-- **Zero Paid Dependencies**: 100% local execution on standard Windows localhost.
+- **Automated WebServer Orchestration:** `playwright.config.ts` automatically detects whether backend (port 8000) and frontend (port 3000) are already active. If active, it attaches seamlessly (`reuseExistingServer: true`).
+- **SQLite Concurrency Protection:** Configured with `workers: 1` and `fullyParallel: false` to eliminate database file lock contention on SQLite during rapid writes.
+- **Zero Fragile Locators:** Uses semantic accessibility selectors (`getByRole`, `getByLabel`, `getByPlaceholder`, `getByText`).
+- **Deterministic Test Data:** Uses isolated timestamps and pre-seeded student personas without destroying demo evaluation records.

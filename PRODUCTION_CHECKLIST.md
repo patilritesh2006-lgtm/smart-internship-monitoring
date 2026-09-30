@@ -72,7 +72,7 @@ This checklist defines the mandatory operational, security, and infrastructure v
 
 | Check | Requirement | Status / Action |
 | :--- | :--- | :--- |
-| **Backend Test Suite** | All automated tests pass (`python -m pytest -v`). | `[x] 61/61 Tests Passing` |
+| **Backend Test Suite** | All automated tests pass (`python -m pytest -v`). | `[x] 75/75 Tests Passing` |
 | **Frontend Linter** | ESLint passes without errors (`npm run lint`). | `[x] Zero Warnings/Errors` |
 | **Frontend Build** | Next.js production build passes (`npm run build`). | `[x] 10 Static Routes Compiled` |
 | **Production ASGI Startup** | Uvicorn starts in production mode without `--reload`. | `[x] Verified` |

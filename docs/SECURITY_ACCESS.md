@@ -62,7 +62,7 @@ The system enforces three primary roles:
 ```
 
 ### 2.1 Cryptographic Standards
-- **Password Storage:** Salted and hashed using `bcrypt` (Passlib wrapper) with a work factor of 12 rounds. Plaintext passwords are never stored, logged, or serialized into responses.
+- **Password Storage:** Salted and hashed using direct `bcrypt` (`bcrypt.gensalt()`, `bcrypt.hashpw()`) with cryptographic salt rounds. Plaintext passwords are never stored, logged, or serialized into responses.
 - **Token Signing:** JSON Web Tokens (JWT) signed via HMAC-SHA256 (`HS256`).
 - **Token Claims:**
   - `sub`: User ID (integer).

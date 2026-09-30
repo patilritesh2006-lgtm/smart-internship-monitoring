@@ -65,7 +65,7 @@ class RiskPredictor:
             payload = joblib.load(self.artifact_path)
             self.model = payload["model"]
             self.preprocessor = payload.get("preprocessor") or MLPreprocessor()
-            self.model_version = payload.get("model_version", "synthetic-v1")
+            self.model_version = payload.get("model_version", "synthetic-v1.1")
             self.is_loaded = True
             logger.info(f"Loaded ML Early-Warning model version {self.model_version}")
         except Exception as e:

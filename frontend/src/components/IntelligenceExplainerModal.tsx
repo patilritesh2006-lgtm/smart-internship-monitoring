@@ -32,8 +32,8 @@ export function IntelligenceExplainerModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Deterministic Intelligence Engine Architecture"
-      subtitle="Transparent, evidence-based formulas for internship progress and skill alignment"
+      title="Explainable Hybrid Early-Warning Intelligence Architecture"
+      subtitle="Transparent deterministic progress health, calibrated ML early-warning signals, and SHAP explainability"
       size="xl"
     >
       <div className="space-y-6 text-slate-700 text-xs">
@@ -44,10 +44,10 @@ export function IntelligenceExplainerModal({
           </div>
           <div>
             <h4 className="text-sm font-extrabold text-blue-950">
-              Evidence-Based &amp; Deterministic by Design
+              Explainable Hybrid Early-Warning Architecture
             </h4>
             <p className="text-xs text-blue-900/90 mt-1 leading-relaxed">
-              This system evaluates student internship health using strictly defined mathematical formulas derived from verified database records. It does <strong>not</strong> use black-box machine learning models, probabilistic predictions, or autonomous decision-making algorithms. Academic mentors and faculty maintain full human review authority.
+              EduIntern combines a <strong>deterministic progress health baseline</strong> (derived from verified milestone records) with an <strong>ML early-warning model</strong> and <strong>SHAP feature attributions</strong> to flag subtle disengagement signals before deadlines are missed. The ML model is a demonstration model trained on synthetic data; faculty mentors maintain full human review authority, with deterministic fallback whenever ML is unavailable.
             </p>
           </div>
         </div>
@@ -197,9 +197,46 @@ export function IntelligenceExplainerModal({
           </p>
         </div>
 
+        {/* 4. ML Early-Warning & SHAP Explainability */}
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles size={16} className="text-indigo-600" />
+            <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
+              4. ML Early-Warning &amp; SHAP Explainability
+            </h3>
+          </div>
+          <p className="text-xs text-slate-500 mb-2">
+            To catch subtle disengagement patterns before deliverables are missed, a demonstration Random Forest classifier evaluates temporal features (velocity, cadence, recency) to predict risk probabilities:
+          </p>
+          <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200/70 mb-3">
+            <p className="text-[11px] text-indigo-950 font-medium">
+              <strong>Local SHAP Feature Attributions:</strong> Every prediction is deconstructed via TreeSHAP into top risk drivers and protective factors, showing faculty exactly why a student received an elevated risk score.
+            </p>
+            <p className="text-[10px] text-indigo-900/80 mt-1 italic">
+              Disclaimer: Prototype model trained on synthetic demonstration data. Evaluated for algorithmic behavior, not validated for real-world institutional certainty.
+            </p>
+          </div>
+        </div>
+
+        {/* 5. Hybrid Guardrails & Deterministic Fallback */}
+        <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs">
+          <div className="flex items-center gap-2 mb-2">
+            <ShieldCheck size={16} className="text-emerald-600" />
+            <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">
+              5. Hybrid Institutional Guardrails &amp; Fallbacks
+            </h3>
+          </div>
+          <ul className="list-disc pl-4 space-y-1.5 text-[11px] text-slate-600">
+            <li><strong>Deterministic Baseline:</strong> Verified milestones and report grades form the ground-truth health baseline.</li>
+            <li><strong>Severe Inactivity Override:</strong> Inactivity &gt; 21 days forces monitoring status regardless of ML probabilities.</li>
+            <li><strong>Early-Warning Escalation:</strong> High ML risk (&ge; 65%) on an on-track student triggers proactive check-in recommendations.</li>
+            <li><strong>Deterministic Fallback:</strong> If the ML model artifact is unavailable, the system transparently defaults to pure deterministic scoring.</li>
+          </ul>
+        </div>
+
         {/* Footer info */}
         <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400">
-          <span>EduIntern Intelligence Architecture v2.4</span>
+          <span>EduIntern Explainable Hybrid Intelligence Architecture v3.0</span>
           <button
             onClick={onClose}
             className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition-all"

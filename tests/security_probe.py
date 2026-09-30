@@ -7,6 +7,9 @@ import httpx
 import json
 import sys
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 BASE = "http://localhost:8000"
 results = []
 
@@ -18,6 +21,26 @@ def test(name, method, url, expected_status=None, **kwargs):
         results.append({"test": name, "code": r.status_code, "status": status})
         print(f"  [{r.status_code}] {status} — {name}")
         return r
+    except httpx.LocalProtocolError:
+        # Some HTTP client libraries reject trailing whitespace in headers locally before transmission.
+        # Fall back to urllib.request to transmit the exact raw header across the wire to the server.
+        try:
+            import urllib.request
+            import urllib.error
+            headers = kwargs.get("headers", {})
+            req = urllib.request.Request(url, headers=headers, method=method)
+            resp = urllib.request.urlopen(req, timeout=8)
+            code = resp.status
+        except urllib.error.HTTPError as e:
+            code = e.code
+        except Exception as fallback_e:
+            results.append({"test": name, "code": "ERR", "status": "ERROR"})
+            print(f"  [ERR] ERROR — {name}: {fallback_e}")
+            return None
+        status = "PASS" if (expected_status is None or code == expected_status) else "FAIL"
+        results.append({"test": name, "code": code, "status": status})
+        print(f"  [{code}] {status} — {name}")
+        return None
     except Exception as e:
         results.append({"test": name, "code": "ERR", "status": "ERROR"})
         print(f"  [ERR] ERROR — {name}: {e}")
@@ -87,8 +110,10 @@ test("Tampered signature → 401", "GET", f"{BASE}/api/students/me",
 test("alg=none bypass attempt → 401", "GET", f"{BASE}/api/students/me",
      headers={"Authorization": "Bearer eyJhbGciOiJub25lIn0.eyJzdWIiOiJhZG1pbkBkZW1vLmNvbSIsInJvbGUiOiJBRE1JTiIsImV4cCI6OTk5OTk5OTk5OX0."},
      expected_status=401)
-test("Empty bearer value → 403/401", "GET", f"{BASE}/api/students/me",
-     headers={"Authorization": "Bearer "})
+test("Empty bearer value 'Bearer' → 401", "GET", f"{BASE}/api/students/me",
+     headers={"Authorization": "Bearer"}, expected_status=401)
+test("Empty bearer value with trailing space 'Bearer ' → 401", "GET", f"{BASE}/api/students/me",
+     headers={"Authorization": "Bearer "}, expected_status=401)
 test("Garbage token → 401", "GET", f"{BASE}/api/students/me",
      headers={"Authorization": "Bearer GARBAGE.TOKEN.HERE"},
      expected_status=401)
@@ -197,16 +222,20 @@ for h, importance in security_headers.items():
 # 10. RATE LIMITING CHECK
 # ================================================================
 print("\n[10] RATE LIMITING — Abuse Protection on Login")
-fail_count = 0
-for i in range(10):
+rate_limited = False
+for i in range(15):
     r = httpx.post(f"{BASE}/api/auth/login",
                    json={"email": "student@demo.com", "password": "WrongPassword123"},
+                   headers={"X-Forwarded-For": "198.51.100.77"},
                    timeout=5)
     if r.status_code == 429:
+        rate_limited = True
         print(f"  [OK] Rate limit triggered after {i+1} attempts (429 Too Many Requests)")
         break
-    fail_count += 1
-if fail_count == 10:
+if rate_limited:
+    results.append({"test": "Rate limiting triggers on brute force", "code": 429, "status": "PASS"})
+else:
+    results.append({"test": "Rate limiting triggers on brute force", "code": 200, "status": "FAIL"})
     print("  *** FINDING: No rate limiting on /api/auth/login — 10 failed attempts allowed ***")
 
 # ================================================================

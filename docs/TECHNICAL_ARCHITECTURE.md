@@ -2,48 +2,238 @@
 
 **Project:** Smart Internship Management & Monitoring System  
 **Architecture Style:** Layered Service-Oriented Web Application (FastAPI + Next.js + SQLite/PostgreSQL)  
-**Version:** 1.0.0  
+**Intelligence Architecture:** Explainable Hybrid Early-Warning Intelligence  
+**Version:** 2.0.0  
+**Updated:** September 30, 2026  
 
 ---
 
 ## 1. System Overview & Architectural Diagram
 
-The system is architected as an end-to-end, decoupled full-stack platform:
+The system is architected as an end-to-end, decoupled full-stack platform with a multi-layered intelligence engine:
 
 ```text
-┌────────────────────────────────────────────────────────────────────────┐
-│                          CLIENT / FRONTEND                             │
-│                  Next.js 14+ | React 18+ | TypeScript                  │
-│                     Tailwind CSS | Lucide Icons                        │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │ HTTP / JSON (REST API)
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                        API GATEWAY / ROUTERS                           │
-│                FastAPI (Asynchronous ASGI Application)                 │
-│         /api/auth | /api/internships | /api/reports | /api/analytics   │
-└───────────────────────────────────┬────────────────────────────────────┘
-                                    │
-                                    ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                        SERVICE & BUSINESS LAYER                        │
-│          AuthService | InternshipService | IntelligenceService         │
-│               Role Validation | Milestone Progress Aggregator          │
-└───────────────────┬────────────────────────────────┬───────────────────┘
-                    │                                │
-                    ▼                                ▼
-┌──────────────────────────────────────┐  ┌──────────────────────────────┐
-│          INTELLIGENCE LAYER          │  │       DATA ACCESS LAYER      │
-│      Deterministic Scoring Core      │  │        SQLAlchemy 2.0        │
-│   Skill Gap Engine | Attention Engine│  │    SQLite (Dev) / Postgres   │
-└──────────────────────────────────────┘  └──────────────┬───────────────┘
-                                                         │
-                                                         ▼
-                                          ┌──────────────────────────────┐
-                                          │      PERSISTENCE STORE       │
-                                          │  Users, Students, Mentors,   │
-                                          │  Internships, Tasks, Reports │
-                                          └──────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                   CLIENT / FRONTEND LAYER                                        │
+│                              Next.js 14.2 App Router (TypeScript)                               │
+│                                                                                                  │
+│  ┌─────────────────────────┐  ┌─────────────────────────┐  ┌──────────────────────────────────┐  │
+│  │     Student Portal      │  │      Mentor Portal      │  │       Administrator Portal       │  │
+│  │ • Milestone Task Toggle │  │ • Priority Triage Queue │  │ • Institutional KPI Dashboard    │  │
+│  │ • Weekly Report Filing  │  │ • Report Review Form    │  │ • Internship Opportunity Queue   │  │
+│  │ • Skill Gap Playground  │  │ • 1-5 Supervisor Rating │  │ • Faculty Allocation Drawer      │  │
+│  │ • TreeSHAP Visual Modal │  │ • Log Intervention Modal│  │ • Placement Approvals            │  │
+│  │ (app/student/page.tsx)  │  │ (app/mentor/page.tsx)   │  │ (app/admin/page.tsx)             │  │
+│  └────────────┬────────────┘  └────────────┬────────────┘  └────────────────┬─────────────────┘  │
+│               │                            │                                │                    │
+│               └────────────────────────────┼────────────────────────────────┘                    │
+│                                            ▼                                                     │
+│                ┌───────────────────────────────────────────────────────┐                         │
+│                │ Access / Login Context & Authenticated API Client     │                         │
+│                │ • Quick 1-Click Persona Login (app/login/page.tsx)    │                         │
+│                │ • Session Provider & JWT Storage (lib/auth.tsx)       │                         │
+│                │ • Fetch Client with Bearer Interceptor (lib/api.ts)   │                         │
+│                └───────────────────────────┬───────────────────────────┘                         │
+└────────────────────────────────────────────┼─────────────────────────────────────────────────────┘
+                                             │ HTTP / JSON (Bearer JWT Authorization)
+                                             ▼
+┌──────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                                  FASTAPI APPLICATION API LAYER                                   │
+│                        FastAPI 0.110 (ASGI Framework) • Pydantic v2 Validation                   │
+│                                                                                                  │
+│   ┌─────────────────────┐   ┌─────────────────────┐   ┌──────────────────────────────────────┐   │
+│   │ Authentication      │   │ Student Domain      │   │ Mentor Domain                        │   │
+│   │ • /api/auth/login   │   │ • /api/students/me  │   │ • /api/mentors/me/interns (triage)   │   │
+│   │ • /api/auth/register│   │ • /api/students/... │   │ • /api/mentors/students/{id}         │   │
+│   │ • /api/auth/me      │   │   (tasks, reports,  │   │ • /api/mentors/reports/{id}/review   │   │
+│   │ (routers/auth.py)   │   │    attention status)│   │ • /api/mentors/interventions         │   │
+│   └─────────────────────┘   │ (routers/students)  │   │ (routers/mentors.py)                 │   │
+│                             └─────────────────────┘   └──────────────────────────────────────┘   │
+│   ┌─────────────────────┐   ┌─────────────────────┐   ┌──────────────────────────────────────┐   │
+│   │ Internship Domain   │   │ Analytics Domain    │   │ Administration Domain                │   │
+│   │ • /api/internships  │   │ • /api/analytics/   │   │ • /api/admin/analytics (KPIs)        │   │
+│   │ • /api/internships/ │   │   skill-gap         │   │ • /api/admin/applications (queue)    │   │
+│   │   apply             │   │ • /api/analytics/   │   │ • /api/admin/mentors (allocation)    │   │
+│   │ (routers/internship)│   │   evaluate-progress │   │ (routers/admin.py)                   │   │
+│   └─────────────────────┘   │ (routers/analytics) │   └──────────────────────────────────────┘   │
+│                             └─────────────────────┘                                              │
+└────────────────────────────────────────────┬─────────────────────────────────────────────────────┘
+                                             │
+                       ┌─────────────────────┴─────────────────────┐
+                       ▼                                           ▼
+┌──────────────────────────────────────────────┐ ┌─────────────────────────────────────────────────┐
+│           SERVICES / DATA LAYER              │ │           EXPLAINABLE HYBRID INTELLIGENCE       │
+│                                              │ │                 ENGINE (offline)                │
+│  ┌────────────────────────────────────────┐  │ │                                                 │
+│  │ JWT Security & RBAC Guards             │  │ │ ┌─────────────────────────────────────────────┐ │
+│  │ • Passlib salted bcrypt password hash  │  │ │ │ 1. Feature Extraction (FeatureExtractor)    │ │
+│  │ • PyJWT HS256 stateless tokens         │  │ │ │    Extracts 10 quantitative signals from    │ │
+│  │ • Role dependencies: Student/Mentor/   │  │ │ │    milestones, reports & ratings            │ │
+│  │   Admin (core/security.py, core/deps)  │  │ │ │    (features/progress_features.py)          │ │
+│  └────────────────────────────────────────┘  │ │ └──────────────────────┬──────────────────────┘ │
+│  ┌────────────────────────────────────────┐  │ │                        ▼                        │
+│  │ Database & SQLAlchemy 2.0 ORM          │  │ │ ┌─────────────────────────────────────────────┐ │
+│  │ • Engine & SessionLocal (SQLite/PG)    │  │ │ │ 2. Deterministic Health Baseline            │ │
+│  │ • Models: User, Student, Mentor, Task, │  │ │ │    Weighted score (Tasks 40%, Reports 30%,  │ │
+│  │   Report, Internship, Application,     │  │ │ │    Ratings 20%, Velocity 10%) → 0-100%      │ │
+│  │   Intervention, Skill (models/)        │  │ │ │    (progress_analysis.py)                   │ │
+│  └────────────────────────────────────────┘  │ │ └──────────────────────┬──────────────────────┘ │
+│  ┌────────────────────────────────────────┐  │ │                        ▼                        │
+│  │ Seed Service (core/seed.py)            │  │ │ ┌─────────────────────────────────────────────┐ │
+│  │ • Realistic multi-persona seeding      │  │ │ │ 3. ML Early-Warning Risk Model              │ │
+│  │ • Calibrated synthetic sample data     │  │ │ │    Pretrained Random Forest Classifier      │ │
+│  │ • Deterministic test accounts          │  │ │ │    (ml/predictor.py, ml/artifacts/)         │ │
+│  └────────────────────────────────────────┘  │ │ └──────────────────────┬──────────────────────┘ │
+│                                              │ │                        ▼                        │
+│                                              │ │ ┌─────────────────────────────────────────────┐ │
+│                                              │ │ │ 4. SHAP Explainability (SHAPExplainer)      │ │
+│                                              │ │ │    TreeSHAP local feature attribution       │ │
+│                                              │ │ │    Positive & negative risk contributors    │ │
+│                                              │ │ │    (ml/explainer.py)                        │ │
+│                                              │ │ └──────────────────────┬──────────────────────┘ │
+│                                              │ │                        ▼                        │
+│                                              │ │ ┌─────────────────────────────────────────────┐ │
+│                                              │ │ │ 5. Hybrid Decision Engine                   │ │
+│                                              │ │ │    Combines deterministic ground truth      │ │
+│                                              │ │ │    with ML risk probability (ml/service.py) │ │
+│                                              │ │ └──────────────────────┬──────────────────────┘ │
+│                                              │ │                        ▼                        │
+│                                              │ │ ┌─────────────────────────────────────────────┐ │
+│                                              │ │ │ 6. Institutional Safety Guardrails          │ │
+│                                              │ │ │    Hard policy overrides for inactivity,    │ │
+│                                              │ │ │    critical failures, low ratings (<2.0)    │ │
+│                                              │ │ └──────────────────────┬──────────────────────┘ │
+│                                              │ │                        ▼                        │
+│                                              │ │ ┌─────────────────────────────────────────────┐ │
+│                                              │ │ │ 7. Deterministic Fallback System            │ │
+│                                              │ │ │    Safe degradation to deterministic score  │ │
+│                                              │ │ │    if model/SHAP artifacts are unavailable  │ │
+│                                              │ │ └─────────────────────────────────────────────┘ │
+│                                              │ │                                                 │
+│                                              │ │ ══════════════ PARALLEL CAPABILITY ════════════ │
+│                                              │ │ ┌─────────────────────────────────────────────┐ │
+│                                              │ │ │ Skill Gap Analysis Engine (skill_gap.py)    │ │
+│                                              │ │ │ • Case-insensitive keyword normalization    │ │
+│                                              │ │ │ • Required vs Student skill set delta       │ │
+│                                              │ │ │ • Deterministic curriculum recommendations  │ │
+│                                              │ │ │ • Zero external LLM / Cloud dependencies    │ │
+│                                              │ │ └─────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────┘ └─────────────────────────────────────────────────┘
+```
+
+### 1.1 End-to-End Operational Data Flow Pipeline
+
+```text
+  [Student Activity]        [Weekly Reports]          [Mentor Feedback]
+  • Milestone task toggle   • Weekly report filing    • Supervisor rating (1-5)
+  • Submission timestamp    • Timesheet hours logged  • Qualitative feedback
+             │                     │                          │
+             └─────────────────────┼──────────────────────────┘
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │   Feature Extraction (10)     │
+                   │ • task_completion_rate        │
+                   │ • submission_timeliness_rate  │
+                   │ • supervisor_rating_avg       │
+                   │ • days_since_last_submission  │
+                   │ • velocity & trend indicators │
+                   └───────────────┬───────────────┘
+                                   │
+                    ┌──────────────┴──────────────┐
+                    ▼                             ▼
+       ┌─────────────────────────┐   ┌─────────────────────────┐
+       │  Deterministic Health   │   │  ML Early-Warning Risk  │
+       │  Ground-Truth Baseline  │   │  RandomForest Classifier│
+       │  (Health Score 0-100%)  │   │  (Risk Probability 0-1) │
+       └────────────┬────────────┘   └────────────┬────────────┘
+                    │                             │
+                    │                             ▼
+                    │                ┌─────────────────────────┐
+                    │                │   TreeSHAP Explainer    │
+                    │                │ • Top positive factors  │
+                    │                │ • Top negative factors  │
+                    │                └────────────┬────────────┘
+                    │                             │
+                    └──────────────┬──────────────┘
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │    Hybrid Decision Engine     │
+                   │ • Reconciles health + ML risk │
+                   │ • Enforces Safety Guardrails  │
+                   │ • (Deterministic fallback if  │
+                   │    model is unavailable)      │
+                   └───────────────┬───────────────┘
+                                   ▼
+                   ┌───────────────────────────────┐
+                   │  Actionable Attention Status  │
+                   │  ON_TRACK • MONITOR • ATTENTION│
+                   │               │               │
+                   │               ▼               │
+                   │  [Faculty Mentor Review]      │
+                   │  Closed-loop intervention log │
+                   │  Academic meeting / Tutoring  │
+                   └───────────────────────────────┘
+```
+
+```mermaid
+flowchart TD
+    subgraph Frontend["CLIENT / FRONTEND (Next.js 14 App Router)"]
+        SP["Student Portal<br/>(app/student/page.tsx)"]
+        MP["Mentor Portal<br/>(app/mentor/page.tsx)"]
+        AP["Admin Portal<br/>(app/admin/page.tsx)"]
+        AUTH["Login / Access Context<br/>(app/login, lib/auth.tsx)"]
+        CLIENT["API Client (lib/api.ts)"]
+        SP --> CLIENT
+        MP --> CLIENT
+        AP --> CLIENT
+        AUTH --> CLIENT
+    end
+
+    CLIENT -->|"Bearer JWT HTTP/JSON"| API
+
+    subgraph API["FASTAPI API LAYER (0.110 ASGI)"]
+        R_AUTH["Authentication Domain (/api/auth)"]
+        R_STU["Student Domain (/api/students)"]
+        R_MEN["Mentor Domain (/api/mentors)"]
+        R_INT["Internship Domain (/api/internships)"]
+        R_ADM["Administration Domain (/api/admin)"]
+        R_ANA["Analytics Domain (/api/analytics)"]
+    end
+
+    API --> SERVICES
+    API --> INTEL
+
+    subgraph SERVICES["SERVICES & DATA LAYER"]
+        SEC["JWT Security & RBAC Guards<br/>(core/security.py, core/deps.py)"]
+        DB["SQLAlchemy 2.0 ORM<br/>(models/, core/database.py)"]
+        SEED["Multi-Persona Seeder<br/>(core/seed.py)"]
+    end
+
+    subgraph INTEL["EXPLAINABLE HYBRID INTELLIGENCE ENGINE"]
+        direction TB
+        FE["1. Feature Extraction (10 Features)<br/>(features/progress_features.py)"]
+        DET["2. Deterministic Health Baseline (0-100%)<br/>(progress_analysis.py)"]
+        ML["3. ML Early-Warning Risk Model (Random Forest)<br/>(ml/predictor.py)"]
+        SHAP["4. SHAP Local Explainability (TreeSHAP)<br/>(ml/explainer.py)"]
+        HYBRID["5. Hybrid Decision Engine<br/>(ml/service.py)"]
+        GUARD["6. Institutional Safety Guardrails<br/>(Hard overrides on critical delays)"]
+        FALLBACK["7. Deterministic Fallback<br/>(Graceful degradation if model missing)"]
+
+        FE --> DET
+        DET --> ML
+        ML --> SHAP
+        SHAP --> HYBRID
+        HYBRID --> GUARD
+        GUARD -.-> FALLBACK
+
+        subgraph PARALLEL["Parallel Capability"]
+            SKILL["Skill Gap Analysis Engine<br/>(skill_gap.py)"]
+        end
+    end
+
+    R_ANA --> SKILL
+    R_STU --> FE
+    R_MEN --> FE
 ```
 
 ---
@@ -52,13 +242,13 @@ The system is architected as an end-to-end, decoupled full-stack platform:
 
 | Layer | Chosen Technology | Version / Tool | Architectural Rationale |
 | :--- | :--- | :--- | :--- |
-| **Frontend** | Next.js / React | Next.js 14 / TypeScript | Fast SSR, typed contracts, intuitive routing, and modular components. |
-| **Styling** | Tailwind CSS | v3 / Vanilla utilities | Responsive, accessible, utility-first design system with clean state tokens. |
-| **Backend API** | FastAPI | Python 3.14 / v0.111+ | High throughput ASGI, native Pydantic v2 validation, auto-generated OpenAPI. |
+| **Frontend** | Next.js / React | Next.js 14.2 / TypeScript 5.7 | Modern App Router, SSR, typed API contracts, responsive layout, glassmorphic UI. |
+| **Styling** | Tailwind CSS | v3.4 / CSS variables | Utility-first responsive design system, touch targets $\ge 44\text{px}$, notch safe areas. |
+| **Backend API** | FastAPI | Python 3.14 / v0.141+ | High-throughput ASGI, native Pydantic v2 validation, auto-generated OpenAPI (`/docs`). |
 | **ORM / Data** | SQLAlchemy | 2.0 (Modern declarative) | Database-agnostic abstractions, type-safe queries, seamless SQLite $\leftrightarrow$ PostgreSQL transition. |
-| **Security** | PyJWT + Passlib | JWT + bcrypt | Industry-standard password salting and stateless signed authorization headers. |
-| **Intelligence** | Pure Python + Pandas | Standalone package | 100% deterministic, zero external AI dependencies, mathematically verified explainability. |
-| **Database** | SQLite (Dev) / PostgreSQL | Modern SQL Engine | Zero-friction local development; standard relational schema portable to production PostgreSQL. |
+| **Security** | PyJWT + bcrypt | JWT (HS256) + direct bcrypt 5.0 | Cryptographic password salting and stateless signed authorization headers. No passlib. |
+| **Intelligence** | Explainable Hybrid Engine | Pure Python + Scikit-Learn + SHAP | 4-factor deterministic baseline + Random Forest early-warning + SHAP local explanations + deterministic fallback. |
+| **Database** | SQLite (Dev) / PostgreSQL | Modern SQL Engine | Zero-friction local development (`internship.db`); connection pool ready for managed PostgreSQL. |
 
 ---
 
@@ -68,62 +258,83 @@ The system is architected as an end-to-end, decoupled full-stack platform:
 smart-internship-management/
 ├── backend/
 │   ├── app/
-│   │   ├── core/                           # Security, config, database sessions
+│   │   ├── core/                           # Security, configuration, database sessions
 │   │   │   ├── config.py                   # Pydantic Settings & environment variables
 │   │   │   ├── database.py                 # Engine, SessionLocal, Base declarative class
-│   │   │   └── security.py                 # bcrypt hashing, JWT create & verify tokens
-│   │   ├── models/                         # SQLAlchemy 2.0 Database Entities
-│   │   │   ├── user.py                     # User, Student, Mentor
-│   │   │   ├── internship.py               # Company, Internship, Application
-│   │   │   ├── milestone.py                # Task, WeeklyReport, Evaluation
-│   │   │   └── skill.py                    # Skill, StudentSkill, InternshipSkill
-│   │   ├── schemas/                        # Pydantic request & response schemas
-│   │   │   ├── auth.py                     # Login, Register, TokenPayload
-│   │   │   ├── internship.py               # ApplicationCreate, InternshipOut
-│   │   │   ├── report.py                   # ReportCreate, ReportReview
-│   │   │   └── analytics.py                # AttentionScoreOut, SkillGapOut
-│   │   ├── services/                       # Business logic & intelligence coordination
-│   │   │   ├── auth_service.py             # User registration, authentication logic
-│   │   │   ├── internship_service.py       # Workflow, approvals, applications
-│   │   │   ├── report_service.py           # Report submission, mentor evaluation
-│   │   │   └── analytics_service.py        # Database $\leftrightarrow$ Intelligence bridge
-│   │   ├── routers/                        # FastAPI Route Handlers
-│   │   │   ├── auth.py                     # /api/auth
-│   │   │   ├── students.py                 # /api/students
-│   │   │   ├── mentors.py                  # /api/mentors
-│   │   │   ├── internships.py              # /api/internships
-│   │   │   ├── reports.py                  # /api/reports
-│   │   │   └── analytics.py                # /api/analytics
-│   │   └── main.py                         # FastAPI application initialization & CORS
-│   ├── tests/                              # Backend API & integration tests
-│   └── requirements.txt                    # Backend dependencies
-├── frontend/                               # Next.js TypeScript Frontend
+│   │   │   ├── security.py                 # Direct bcrypt hashing & PyJWT token management
+│   │   │   ├── deps.py                     # Role guards (get_current_student, mentor, admin)
+│   │   │   └── seed.py                     # Multi-persona realistic database seeder
+│   │   ├── models/
+│   │   │   └── __init__.py                 # SQLAlchemy 2.0 Entities (User, Student, Mentor, etc.)
+│   │   ├── schemas/
+│   │   │   └── __init__.py                 # Pydantic v2 request & response schemas
+│   │   ├── routers/                        # FastAPI Route Handlers & Business Orchestration
+│   │   │   ├── auth.py                     # /api/auth (register, login, me)
+│   │   │   ├── students.py                 # /api/students (profile, tasks, reports, attention)
+│   │   │   ├── mentors.py                  # /api/mentors (triage roster, report grading, interventions)
+│   │   │   ├── admin.py                    # /api/admin (institutional analytics, approvals, allocations)
+│   │   │   ├── internships.py              # /api/internships (catalog, apply, publish)
+│   │   │   └── analytics.py                # /api/analytics (skill-gap, attention simulation)
+│   │   └── main.py                         # FastAPI application initialization, lifespan, CORS
+│   ├── tests/
+│   │   └── test_api_integration.py         # 23 Backend API integration and security tests
+│   └── requirements.txt                    # Backend dependencies (fastapi, scikit-learn, shap, etc.)
+├── frontend/                               # Next.js 14 TypeScript Frontend
 │   ├── src/
-│   │   ├── app/                            # App router pages (Next.js 14)
-│   │   │   ├── page.tsx                    # Landing / Overview page
-│   │   │   ├── login/                      # Login screen
-│   │   │   ├── register/                   # Student registration
-│   │   │   ├── student/                    # Student portal (Dashboard, Tasks, Reports, Skill Gap)
-│   │   │   ├── mentor/                     # Mentor portal (Assigned Interns, Review Queue)
-│   │   │   └── admin/                      # Admin portal (Internships, Allocations, Institutional Stats)
-│   │   ├── components/                     # Reusable UI components
-│   │   │   ├── ui/                         # Buttons, Inputs, Badges, Cards, Modals
-│   │   │   ├── layout/                     # Navigation, Sidebar, RoleHeader
-│   │   │   ├── student/                    # SkillGapCard, AttentionBanner, ReportHistory
-│   │   │   └── mentor/                     # EvaluationModal, ProgressMatrix
-│   │   ├── lib/                            # API client, token management, constants
-│   │   │   ├── api.ts                      # Fetch wrapper with JWT headers
-│   │   │   └── auth.tsx                    # AuthContext & Session Provider
-│   │   └── types/                          # Shared TypeScript interfaces
+│   │   ├── app/                            # Next.js App Router Pages
+│   │   │   ├── page.tsx                    # Institutional Landing Page
+│   │   │   ├── login/page.tsx              # Quick 1-click persona login page
+│   │   │   ├── register/page.tsx           # Role-guarded registration
+│   │   │   ├── student/page.tsx            # Student workspace (tasks, reports, attention)
+│   │   │   ├── mentor/page.tsx             # Faculty triage & grading portal
+│   │   │   └── admin/page.tsx              # Administrator oversight & approvals
+│   │   ├── components/                     # Reusable UI Components
+│   │   │   ├── ProgressAttentionCard.tsx   # Hybrid progress attention & early-warning card
+│   │   │   ├── IntelligenceExplainerModal.tsx # Transparent math & ML explanation modal
+│   │   │   ├── TopHeader.tsx               # Contextual persona header
+│   │   │   ├── Sidebar.tsx                 # Desktop and mobile drawer navigation
+│   │   │   └── ui/                         # GlassCard, ProgressBar, StatusBadge, Modal
+│   │   └── lib/                            # Client infrastructure
+│   │       ├── api.ts                      # Authenticated API fetch wrapper
+│   │       └── auth.tsx                    # React Context & Session Provider
 │   ├── package.json
-│   └── tailwind.config.js
-├── intelligence/                           # Standalone Intelligence Package (Verified 100%)
+│   └── tailwind.config.ts
+├── intelligence/                           # Standalone Intelligence & Analytics Package
 │   ├── app/
+│   │   ├── features/
+│   │   │   └── progress_features.py        # 10 typed progress features & cadence engineering
+│   │   ├── ml/                             # Phase 3 ML Early-Warning Pipeline
+│   │   │   ├── dataset.py                  # Reproducible synthetic dataset generator (N=3000)
+│   │   │   ├── preprocessing.py            # MLPreprocessor bounds, imputations, one-hot trends
+│   │   │   ├── model.py                    # RandomForestClassifier training with GroupShuffleSplit
+│   │   │   ├── predictor.py                # Singleton RiskPredictor inference engine
+│   │   │   ├── explainer.py                # SHAPExplainer (TreeSHAP feature attributions)
+│   │   │   ├── service.py                  # Hybrid decision policy & institutional overrides
+│   │   │   └── artifacts/                  # Serialized risk_model_v1.joblib & metadata
 │   │   ├── models.py                       # Pydantic schemas (SkillGap, ProgressAttention)
-│   │   ├── progress_analysis.py            # 4-factor scoring & reason generator
-│   │   └── skill_gap.py                    # Case-insensitive skill matcher & recommendations
-│   └── tests/                              # 40 Unit tests with 100% statement coverage
-└── docs/                                   # Architectural Specifications
+│   │   ├── progress_analysis.py            # 4-factor deterministic scoring engine
+│   │   └── skill_gap.py                    # Case-insensitive skill matching algebra
+│   └── tests/                              # Pytest Intelligence Test Suites
+│       ├── test_ml_pipeline.py             # 21 tests for ML pipeline, SHAP, & hybrid logic
+│       ├── test_progress_analysis.py       # 17 tests for deterministic 4-factor math
+│       └── test_skill_gap.py               # 14 tests for skill gap algebra & recommendations
+├── tests/                                  # Automated Playwright E2E Test Suite (118 Tests)
+│   ├── fixtures/                           # Page Objects and Test Contexts
+│   ├── health/                             # Startup & health checks (5 tests)
+│   ├── auth/                               # Authentication & session checks (9 tests)
+│   ├── navigation/                         # Route guards & 404s (7 tests)
+│   ├── ui/                                 # UI components & visual cards (6 tests)
+│   ├── forms/                              # Interactive form controls (7 tests)
+│   ├── crud/                               # Tasks & reports CRUD (6 tests)
+│   ├── api/                                # REST API contract checks (8 tests)
+│   ├── validation/                         # Boundary conditions (6 tests)
+│   ├── security/                           # RBAC & token security (5 tests)
+│   ├── responsive/                         # Viewport & mobile tests (6 tests)
+│   ├── error-handling/                     # Fault tolerance (5 tests)
+│   ├── accessibility/                      # a11y labels & keyboard nav (5 tests)
+│   ├── workflows/                          # Full multi-role journeys (4 tests)
+│   └── security/security-audit.spec.ts     # Deep security & tamper audit (39 tests)
+└── docs/                                   # Architectural Specifications & Reports
 ```
 
 ---
@@ -138,7 +349,8 @@ smart-internship-management/
 │ email (UQ)   │          │ user_id (FK)   │          │ student_id   │
 │ hashed_pw    │          │ roll_number    │          │ internship_id│
 │ role         │          │ department     │          │ status       │
-└──────┬───────┘          └───────┬────────┘          └──────────────┘
+│ is_active    │          │ academic_year  │          └──────────────┘
+└──────┬───────┘          └───────┬────────┘
        │                          │
        │ 1──────1                 │ 1──────N
        ▼                          ▼
@@ -159,125 +371,57 @@ smart-internship-management/
 │ title        │          │ internship_id  │          │ internship_id│
 │ company_id   │          │ title          │          │ week_number  │
 │ mentor_id    │          │ is_completed   │          │ status       │
-│ status       │          └────────────────┘          │ mentor_score │
-└──────────────┘                                      └──────────────┘
+│ student_id   │          └────────────────┘          │ mentor_score │
+│ status       │                                      └──────────────┘
+└──────┬───────┘                                              │
+       │ 1──────N                                             │ 1──────N
+       ▼                                                      ▼
+┌──────────────┐                                      ┌──────────────┐
+│InternSkills  │                                      │Interventions │
+├──────────────┤                                      ├──────────────┤
+│ id (PK)      │                                      │ id (PK)      │
+│ internship_id│                                      │ student_id   │
+│ skill_name   │                                      │ mentor_id    │
+└──────────────┘                                      │ notes        │
+                                                      └──────────────┘
 ```
-
-### 4.1 Detailed Entity Dictionary
-
-1. **`users` Table:**
-   - `id`: `Integer`, Primary Key, autoincrement.
-   - `email`: `String(255)`, Unique, Indexed, Not Null.
-   - `hashed_password`: `String(255)`, Not Null.
-   - `full_name`: `String(255)`, Not Null.
-   - `role`: `Enum('STUDENT', 'MENTOR', 'ADMIN')`, Not Null.
-   - `is_active`: `Boolean`, Default `True`.
-   - `created_at`: `DateTime`, Default UTC.
-
-2. **`students` Table:**
-   - `id`: `Integer`, Primary Key.
-   - `user_id`: `Integer`, Foreign Key $\rightarrow$ `users.id` (ON DELETE CASCADE), Unique.
-   - `roll_number`: `String(50)`, Unique, Not Null.
-   - `department`: `String(100)`, Not Null.
-   - `academic_year`: `Integer`, Not Null.
-
-3. **`mentors` Table:**
-   - `id`: `Integer`, Primary Key.
-   - `user_id`: `Integer`, Foreign Key $\rightarrow$ `users.id` (ON DELETE CASCADE), Unique.
-   - `department`: `String(100)`, Not Null.
-   - `designation`: `String(100)`, Not Null.
-
-4. **`companies` Table:**
-   - `id`: `Integer`, Primary Key.
-   - `name`: `String(255)`, Unique, Not Null.
-   - `industry`: `String(100)`, Not Null.
-   - `website`: `String(255)`, Nullable.
-
-5. **`internships` Table:**
-   - `id`: `Integer`, Primary Key.
-   - `title`: `String(255)`, Not Null.
-   - `description`: `Text`, Not Null.
-   - `company_id`: `Integer`, Foreign Key $\rightarrow$ `companies.id`.
-   - `mentor_id`: `Integer`, Foreign Key $\rightarrow$ `mentors.id`, Nullable.
-   - `student_id`: `Integer`, Foreign Key $\rightarrow$ `students.id`, Nullable (assigned when approved).
-   - `status`: `Enum('AVAILABLE', 'APPLIED', 'ACTIVE', 'COMPLETED')`, Default `'AVAILABLE'`.
-   - `start_date`: `Date`, Nullable.
-   - `end_date`: `Date`, Nullable.
-
-6. **`internship_skills` Table:**
-   - `id`: `Integer`, Primary Key.
-   - `internship_id`: `Integer`, Foreign Key $\rightarrow$ `internships.id` (ON DELETE CASCADE).
-   - `skill_name`: `String(100)`, Not Null.
-
-7. **`student_skills` Table:**
-   - `id`: `Integer`, Primary Key.
-   - `student_id`: `Integer`, Foreign Key $\rightarrow$ `students.id` (ON DELETE CASCADE).
-   - `skill_name`: `String(100)`, Not Null.
-
-8. **`applications` Table:**
-   - `id`: `Integer`, Primary Key.
-   - `student_id`: `Integer`, Foreign Key $\rightarrow$ `students.id`.
-   - `internship_id`: `Integer`, Foreign Key $\rightarrow$ `internships.id`.
-   - `status`: `Enum('PENDING', 'APPROVED', 'REJECTED')`, Default `'PENDING'`.
-   - `applied_at`: `DateTime`, Default UTC.
-
-9. **`tasks` Table:**
-   - `id`: `Integer`, Primary Key.
-   - `internship_id`: `Integer`, Foreign Key $\rightarrow$ `internships.id` (ON DELETE CASCADE).
-   - `title`: `String(255)`, Not Null.
-   - `description`: `Text`, Nullable.
-   - `is_completed`: `Boolean`, Default `False`.
-   - `due_date`: `Date`, Nullable.
-
-10. **`weekly_reports` Table:**
-    - `id`: `Integer`, Primary Key.
-    - `internship_id`: `Integer`, Foreign Key $\rightarrow$ `internships.id` (ON DELETE CASCADE).
-    - `week_number`: `Integer`, Not Null.
-    - `content`: `Text`, Not Null.
-    - `hours_worked`: `Float`, Default 0.0.
-    - `status`: `Enum('SUBMITTED', 'REVIEWED')`, Default `'SUBMITTED'`.
-    - `mentor_feedback`: `Text`, Nullable.
-    - `mentor_score`: `Float`, Nullable (0 to 100).
-    - `submitted_at`: `DateTime`, Default UTC.
 
 ---
 
-## 5. Intelligence Layer Integration Bridge
+## 5. Explainable Hybrid Early-Warning Intelligence
 
-The backend acts as an orchestrator bridging relational database data with the pure Python intelligence engines:
+The platform integrates two complementary intelligence approaches into a unified decision service:
 
-```python
-# Conceptual Bridge: AnalyticsService
-class AnalyticsService:
-    @staticmethod
-    def get_student_progress_attention(db: Session, internship_id: int):
-        internship = db.query(Internship).filter_by(id=internship_id).first()
-        tasks_total = db.query(Task).filter_by(internship_id=internship_id).count()
-        tasks_completed = db.query(Task).filter_by(internship_id=internship_id, is_completed=True).count()
-        reports_expected = calculate_expected_weeks(internship.start_date)
-        reports_submitted = db.query(WeeklyReport).filter_by(internship_id=internship_id).count()
-        
-        # Calculate raw 0-100 indicators
-        task_completion = (tasks_completed / tasks_total * 100) if tasks_total > 0 else 100
-        report_submission = min(100, (reports_submitted / reports_expected * 100)) if reports_expected > 0 else 100
-        mentor_feedback = calculate_average_feedback(db, internship_id) # 0-100 or neutral pending policy
-        progress_consistency = calculate_consistency(db, internship_id)   # 0-100
-        
-        # Invoke Intelligence Engine
-        return evaluate_progress_attention(
-            progress_consistency=progress_consistency,
-            task_completion=task_completion,
-            report_submission=report_submission,
-            mentor_feedback=mentor_feedback
-        )
-```
+### 5.1 The 6-Stage Hybrid Pipeline
+
+1. **Feature Engineering (`intelligence/app/features/progress_features.py`):**
+   - Extracts 10 typed features from raw milestone records.
+   - Measures true calendar cadence: $\text{Consistency} = 0.50 \times \text{Week Coverage} + 0.30 \times \text{Recency} + 0.20 \times \text{Punctuality}$.
+   - Omit `attendance_rate` from model inputs due to database schema limitations.
+2. **Deterministic Progress Health Engine (`intelligence/app/progress_analysis.py`):**
+   - Establishes the authoritative progress baseline from verified deliverables:
+     $$\text{Progress Health Score} = (0.30 \times \text{Consistency}) + (0.30 \times \text{Tasks}) + (0.20 \times \text{Reports}) + (0.20 \times \text{Mentor Feedback})$$
+   - Mapped to: $\ge 75 \implies \text{ON\_TRACK}$, $50 - 74 \implies \text{MONITOR}$, $< 50 \implies \text{NEEDS\_ATTENTION}$.
+3. **ML Early-Warning Risk Model (`intelligence/app/ml/`):**
+   - `RandomForestClassifier` trained on synthetic demonstration data ($N=3,000$, seed 42) using group-aware splits.
+   - Evaluates risk probability ($\hat{p} \in [0, 1]$) indicating whether a student exhibits early disengagement patterns.
+4. **SHAP Explainability (`intelligence/app/ml/explainer.py`):**
+   - Computes local feature attributions using `shap.TreeExplainer`.
+   - Generates top $k$ explanatory factors showing direction (`RISK` vs `PROTECTIVE`), impact level, and plain-language narrative reasons.
+5. **Hybrid Decision Policy & Institutional Overrides (`intelligence/app/ml/service.py`):**
+   - **Baseline:** Completed deliverables form ground truth.
+   - **Severe Inactivity Override:** If `days_since_last_activity > 21`, status is forced to `MONITOR` or `NEEDS_ATTENTION` regardless of ML probability.
+   - **Early-Warning Escalation:** If deterministic status is `ON_TRACK` but ML risk probability is $\ge 0.65$, status escalates to `MONITOR` with proactive intervention alerts.
+   - **Low Data Caution:** Flags students in weeks $< 2$ as preliminary.
+6. **Graceful Deterministic Fallback:**
+   - If model artifacts or dependencies are unavailable, the system transparently defaults to pure deterministic scoring with `model_available=False`.
 
 ---
 
 ## 6. Migration Strategy: SQLite $\rightarrow$ PostgreSQL
 
-1. **Dialect Neutrality:** All models use standard SQLAlchemy column types (`Integer`, `String`, `DateTime`, `Text`, `Boolean`, `Float`) avoiding SQLite-specific dynamic types.
-2. **Environment Configuration:** The database URL is configured via environment variable:
-   - Development: `DATABASE_URL="sqlite:///./smart_internship.db"`
+1. **Dialect Neutrality:** All models use standard ANSI SQL types (`Integer`, `String`, `DateTime`, `Text`, `Boolean`, `Float`).
+2. **Environment Configuration:**
+   - Development: `DATABASE_URL="sqlite:///./internship.db"`
    - Production: `DATABASE_URL="postgresql://user:password@host:5432/smart_internship"`
-3. **Connection Handling:** SQLite engine uses `connect_args={"check_same_thread": False}`; PostgreSQL skips this argument automatically.
+3. **Connection Pooling:** In production with PostgreSQL, `pool_size=20`, `max_overflow=10`, `pool_pre_ping=True`, and `pool_recycle=300` maintain connection health automatically.

@@ -257,7 +257,7 @@ export default function LoginPage() {
                   </label>
                   <span className="text-[11px] font-semibold text-slate-400 flex items-center gap-1">
                     <Clock size={12} />
-                    FERPA Compliant
+                    Role Protected
                   </span>
                 </div>
 
@@ -387,7 +387,7 @@ export default function LoginPage() {
           EduIntern | Institutional Internship Management &amp; Intelligence
         </div>
         <div>
-          Accredited Higher Education Experiential Learning System • SOC-2 Type II Certified
+          Higher Education Experiential Learning System • Role-Based Access Control
         </div>
       </footer>
 

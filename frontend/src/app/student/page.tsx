@@ -631,7 +631,7 @@ export default function StudentPortal() {
                         {companyName}
                       </h3>
                       <p className="text-xs text-slate-500 font-medium">
-                        {roleTitle} • {internship?.location || "Accredited"}
+                        {roleTitle} • {internship?.location || "Approved"}
                       </p>
                     </div>
                   </div>
@@ -723,7 +723,7 @@ export default function StudentPortal() {
                   Curriculum Deliverables &amp; Milestones
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Accredited technical deliverables tracked with deterministic progress evaluation.
+                  Curricular technical deliverables tracked with deterministic progress evaluation.
                 </p>
               </div>
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto">
@@ -799,7 +799,7 @@ export default function StudentPortal() {
                   Weekly Activity Reports &amp; Timesheets
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Accredited weekly hours and task summaries submitted for faculty verification.
+                  Logged weekly hours and task summaries submitted for faculty verification.
                 </p>
               </div>
               <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-auto flex-wrap">
@@ -1195,7 +1195,7 @@ export default function StudentPortal() {
               label="Faculty Supervision"
               value={supervisorName}
               subValue="(Assigned Advisor)"
-              badge="Accredited"
+              badge="Faculty"
               badgeColor="blue"
               icon={<UserCheck size={18} />}
               iconBg="emerald"
@@ -1708,7 +1708,7 @@ export default function StudentPortal() {
         <GlassCard className="p-6">
           <SectionHeader
             title="Curriculum Deliverables &amp; Milestones"
-            subtitle="Accredited milestone checklist tracked deterministically."
+            subtitle="Curricular milestone checklist tracked deterministically."
             badge={`${completedTasks} of ${totalTasks} Completed`}
           />
           <ProgressBar value={taskPct} tone="blue" size="md" showLabel className="mb-6" />
@@ -1922,7 +1922,7 @@ export default function StudentPortal() {
             <div>
               <div className="flex items-center gap-2 mb-1 flex-wrap">
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/70">
-                  Accredited Placement
+                  Approved Placement
                 </span>
                 <span className="text-slate-400 text-xs">•</span>
                 <span className="text-xs text-slate-500 font-semibold">{companyName}</span>
@@ -2001,7 +2001,7 @@ export default function StudentPortal() {
                   Compensation &amp; Location
                 </span>
                 <div className="text-lg font-black text-slate-900">
-                  {internship?.stipend ? `$${internship.stipend.toLocaleString()} / month` : "Accredited Term"}
+                  {internship?.stipend ? `$${internship.stipend.toLocaleString()} / month` : "Curricular Term"}
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
                   {internship?.location || "Remote / Hybrid Placement"}
@@ -2168,7 +2168,7 @@ export default function StudentPortal() {
                   Placement Curriculum Milestones
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Accredited technical deliverables tracked directly against university syllabus requirements.
+                  Curricular technical deliverables tracked directly against university syllabus requirements.
                 </p>
               </div>
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto">
@@ -2314,7 +2314,7 @@ export default function StudentPortal() {
           <GlassCard className="p-6">
             <SectionHeader
               title="Partner Employer Opportunities &amp; Fellowships"
-              subtitle="Browse accredited industry openings for upcoming semester terms."
+              subtitle="Browse partner industry openings for upcoming semester terms."
               className="mb-4"
             />
             <div className="space-y-3">

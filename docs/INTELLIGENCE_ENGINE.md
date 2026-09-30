@@ -18,7 +18,7 @@ The **Smart Internship Management & Monitoring System (SIMS)** Progress Intellig
 │   ┌────────────────────────────────────────────────────────────────────────────────┐   │
 │   │ backend/app/routers/students.py -> compute_student_attention_metrics()         │   │
 │   │ • Queries Task, WeeklyReport, Internship from DB                               │   │
-│   │ • Invokes Feature Extraction & Progress Evaluation                             │   │
+│   │ • Invokes Feature Extraction & Hybrid Early-Warning Progress Evaluation        │   │
 │   └──────────────────────────────────────┬─────────────────────────────────────────┘   │
 └──────────────────────────────────────────┼─────────────────────────────────────────────┘
                                            │
@@ -31,20 +31,41 @@ The **Smart Internship Management & Monitoring System (SIMS)** Progress Intellig
 │     Attendance Rate, Task Velocity, Report Punctuality, Days Since Activity,           │
 │     Activity Consistency, Progress Trend, and Days Remaining.                          │
 │   • Eliminates collinear double-counting.                                              │
-└──────────────────────────────────────────┬─────────────────────────────────────────────┘
-                                           │
-                                           ▼
+└────────────────────────────────────┬───────────────────────────────────────────────────┘
+                                     │
+         ┌───────────────────────────┴───────────────────────────┐
+         ▼                                                       ▼
+┌───────────────────────────────────┐   ┌────────────────────────────────────────────────┐
+│   DETERMINISTIC HEALTH ENGINE     │   │         ML EARLY WARNING PIPELINE              │
+│   (progress_analysis.py)          │   │         (intelligence/app/ml/predictor.py)     │
+│                                   │   │                                                │
+│ • Health Score: 0-100%            │   │ • Random Forest Classifier (Scikit-Learn)      │
+│   30% Consistency + 30% Tasks +   │   │ • Outputs Risk Probability (0.0 to 1.0)        │
+│   20% Reports + 20% Mentor Score  │   │ • Status: ON_TRACK | MONITOR | NEEDS_ATTENTION │
+│ • Baseline Deterministic Metrics  │   └───────────────────────┬────────────────────────┘
+└─────────────────┬─────────────────┘                           │
+                  │                                             ▼
+                  │                     ┌────────────────────────────────────────────────┐
+                  │                     │         SHAP EXPLAINABILITY ENGINE             │
+                  │                     │         (intelligence/app/ml/explainer.py)     │
+                  │                     │                                                │
+                  │                     │ • TreeSHAP Local Feature Attribution           │
+                  │                     │ • Top Risk Drivers (negative impacts)          │
+                  │                     │ • Top Protective Factors (positive impacts)    │
+                  │                     └───────────────────────┬────────────────────────┘
+                  │                                             │
+                  └───────────────────────┬─────────────────────┘
+                                          ▼
 ┌────────────────────────────────────────────────────────────────────────────────────────┐
-│                     PROGRESS HEALTH ENGINE (intelligence/app/progress_analysis.py)     │
+│                 HYBRID DECISION ENGINE (intelligence/app/ml/service.py)                │
 │                                                                                        │
-│   ProgressAttentionEngine.evaluate(features)                                           │
-│   • Formula: Health Score = 0.30*Consistency + 0.30*Tasks + 0.20*Reports + 0.20*Mentor │
-│   • Categorical Status: ON_TRACK (>=75) | MONITOR (50-74) | NEEDS_ATTENTION (<50)      │
-│   • Evidence-Based Explanations (Traceable metrics)                                    │
-│   • Actionable Deterministic Recommendations                                           │
-│   • Returns: ProgressAttentionEngineResult (Backward-compatible API payload)           │
+│ • Merges Deterministic Health Score + ML Risk Probability + SHAP Explanations          │
+│ • Institutional Safety Guardrails: Inactivity > 21d forces CRITICAL NEEDS_ATTENTION    │
+│ • Deterministic Fallback: Gracefully operates if ML model/explainer artifact is missing│
+│ • Formats backward-compatible ProgressAttentionEngineResult API payload                │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
 
 ---
 
@@ -177,38 +198,43 @@ Recommendations are deterministically derived from detected deficiencies:
 
 ## 9. Deterministic Heuristic vs Machine Learning
 
-SIMS intentionally employs a deterministic heuristic for the following reasons:
-1. **Accreditation Auditability:** Higher education compliance (e.g., ABET, NBA, NAAC) requires that every student risk alert be explainable to faculty committees with reproducible mathematical proofs.
+SIMS intentionally anchors its baseline in deterministic rules for the following reasons:
+1. **Academic Auditability:** Institutional governance requires that every student risk alert be explainable to faculty committees with reproducible, auditable metrics.
 2. **Zero Hallucinations & Opacity:** No LLM generation or opaque neural weights that could produce discriminatory or unpredictable scores.
 3. **Zero Cold-Start Dependency:** New academic programs or newly enrolled cohorts function on Day 1 without requiring thousands of historical labeled student records to train supervised models.
 4. **Instant Millisecond Execution:** Evaluates inside standard synchronous HTTP request loops with negligible latency and zero external API fees.
 
 ---
 
-## 10. Future ML / XGBoost / SHAP Integration Point
+## 10. Implemented Phase 3: Explainable Hybrid Early-Warning Intelligence
 
-The Phase 1 and 2 refactoring creates a clean boundary for future Machine Learning integration:
+The Feature Engineering layer feeds directly into the implemented Phase 3 ML Early-Warning pipeline:
 
 ```text
-                                 Future Phase 3 Extension
-                                 
-           extract_progress_features(...) ────────┐
-                         │                        │
-                         ▼                        ▼
-           Deterministic Health Engine   XGBoost Attrition Model (Optional)
-           (Rule-based accreditation)    (Predictive early-warning probability)
-                         │                        │
-                         │                        ▼
-                         │               SHAP TreeExplainer
-                         │               (Feature attribution weights)
-                         │                        │
-                         └──────────────┬─────────┘
-                                        ▼
-                         Unified API Response Payload
-                         • progress_health_score
-                         • ml_risk_probability (Phase 3)
-                         • reasons (Augmented with top SHAP contributors)
+                                Phase 3 Hybrid Pipeline
+                                
+          extract_progress_features(...) ────────┐
+                        │                        │
+                        ▼                        ▼
+          Deterministic Health Engine   Random Forest Early-Warning Model
+          (Baseline accreditation)      (Predictive disengagement probability)
+                        │                        │
+                        │                        ▼
+                        │               SHAP TreeExplainer
+                        │               (Local feature attribution weights)
+                        │                        │
+                        └──────────────┬─────────┘
+                                       ▼
+                     Hybrid Decision Layer & Guardrails
+                     • progress_health_score (Deterministic baseline)
+                     • risk_probability & risk_label (ML signal)
+                     • reasons & recommendations (SHAP-augmented)
+                     • Severe inactivity safety override (> 21 days)
+                     • Graceful deterministic fallback (if ML offline)
 ```
 
-- **Feature Matrix:** `ProgressFeatures` produces a clean numerical vector $[T, R, M, \text{velocity}, \text{consistency}, \text{recency}, \text{punctuality}, \text{days\_remaining}]$.
-- **SHAP Integration:** In Phase 3, a pre-trained `xgboost.XGBClassifier` can ingest this vector, and `shap.TreeExplainer` can replace or augment the `reasons` list with top positive and negative SHAP feature attributions, without requiring any alterations to the existing API schemas or frontend components.
+- **Feature Matrix:** `ProgressFeatures` produces a clean numerical vector $[T, R, M, \text{velocity}, \text{consistency}, \text{recency}, \text{punctuality}, \text{days\_remaining}]$ with one-hot encoded progress trends.
+- **ML Model:** Trained `RandomForestClassifier` (Scikit-Learn) with Group-Aware splits to prevent student leakage. Trained on synthetic demonstration data ($N=3,000$).
+- **SHAP Feature Attributions:** `shap.TreeExplainer` maps top risk and protective drivers to plain-language institutional reasons.
+- **Complete Specification:** For full ML training pipeline, calibration metrics, and model card, see [`docs/ML_EARLY_WARNING.md`](file:///docs/ML_EARLY_WARNING.md) and [`docs/MODEL_CARD.md`](file:///docs/MODEL_CARD.md).
+

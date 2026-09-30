@@ -79,7 +79,7 @@ Dense data tables can degrade on mobile screens. SIMS applies a responsive layou
 
 Verify compilation and test integrity:
 ```powershell
-# Run all backend unit and intelligence tests (61 tests)
+# Run all backend unit and intelligence tests (75 tests)
 python -m pytest
 
 # Build frontend production bundle with Next.js & TypeScript

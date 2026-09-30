@@ -140,7 +140,7 @@
   - `400 Bad Request`: Caller has no active internship.
 
 ### 2.9 `GET /api/students/me/attention`
-- **Description:** Triggers live recalculation of the 4-Factor Attention Engine directly from database milestone records.
+- **Description:** Triggers live evaluation of the Explainable Hybrid Early-Warning Intelligence Engine directly from database milestone records, returning deterministic progress health along with calibrated ML early-warning signals and SHAP feature attributions.
 - **Auth Required:** Yes (`STUDENT`)
 - **Response Status:** `200 OK`
 - **Response Body:**
@@ -152,10 +152,35 @@
       "progress_consistency": 80.0,
       "task_completion": 80.0,
       "report_submission": 80.0,
-      "mentor_feedback": 91.2
+      "mentor_feedback": 91.2,
+      "attendance_rate": null,
+      "task_velocity": 1.25,
+      "report_punctuality": 100.0,
+      "days_since_last_activity": 2,
+      "activity_consistency": 80.0,
+      "progress_trend": "IMPROVING",
+      "days_remaining": 42
     },
-    "reasons": ["Progress is consistent."],
-    "recommendations": ["Maintain regular progress updates."]
+    "reasons": ["Milestone pacing and deliverable cadence are consistent."],
+    "recommendations": ["Maintain current submission pace across upcoming weeks."],
+    "progress_health_score": 82.24,
+    "progress_trend": "IMPROVING",
+    "risk_probability": 0.12,
+    "risk_label": "LOW_RISK",
+    "model_version": "synthetic-v1.1",
+    "model_available": true,
+    "top_risk_factors": [
+      {
+        "feature": "report_punctuality",
+        "label": "Report Punctuality",
+        "impact": "HIGH",
+        "direction": "PROTECTIVE",
+        "value": 100.0,
+        "unit": "%",
+        "attribution_weight": -0.18,
+        "description": "Submitting weekly reports before deadlines strongly protects against progress risk."
+      }
+    ]
   }
   ```
 
@@ -253,10 +278,16 @@
 - **Auth Required:** Yes (Any authenticated role)
 
 ### 6.2 `GET /api/analytics/progress-attention/{student_id}`
-- **Description:** Evaluates live database progress attention for `student_id`.
+- **Description:** Evaluates live database progress attention for `student_id` using the Explainable Hybrid Intelligence Engine.
 - **Auth Required:** Yes
 - **Ownership Rules:**
   - Students may only view their own `student_id`.
   - Mentors may only view assigned interns.
   - Admins may view any student.
   - Violations return `403 Forbidden`.
+
+### 6.3 `POST /api/analytics/evaluate-progress-simulation`
+- **Description:** Interactive simulation endpoint allowing caller to evaluate arbitrary 4-factor scoring combinations without database writes.
+- **Auth Required:** Yes (Any authenticated role)
+- **Response Status:** `200 OK`
+

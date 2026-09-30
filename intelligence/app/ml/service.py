@@ -50,7 +50,7 @@ def predict_progress_risk(
       {
         "risk_probability": 0.78,
         "risk_label": "ATTENTION_RISK",
-        "model_version": "synthetic-v1",
+        "model_version": "synthetic-v1.1",
         "model_available": true
       }
     """

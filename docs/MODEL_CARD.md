@@ -84,33 +84,37 @@ where $\epsilon \sim \mathcal{N}(0, 5.0)$ represents human supervisor variabilit
 ## 8. Validation Procedure
 
 - **Group-Aware Splitting:** `GroupShuffleSplit` partitions observations by `synthetic_student_id` into:
-  - Training: 70% of students (~2,100 observations)
-  - Validation: 15% of students (~450 observations)
-  - Test: 15% of students (~450 observations)
+  - Training: 420 students (2,100 observations, 70%)
+  - Validation: 90 students (450 observations, 15%)
+  - Test: 90 students (450 observations, 15%)
+  - Total: 600 unique synthetic students (3,000 observations across 5 checkpoints)
 - Evaluation is strictly conducted on held-out test students who were never seen during training or validation, verifying true generalization across novel student trajectories rather than memorizing individual checkpoint rows.
 
 ## 9. Evaluation Metrics
 
-Evaluated on 450 unseen test student checkpoints:
+Evaluated on 450 unseen test student checkpoints from the synthetic demonstration dataset:
 
 | Metric | Score | Analysis |
 | :--- | :--- | :--- |
-| **Accuracy** | 96.22% | Overall classification fidelity on synthetic distribution |
-| **Precision** | 87.80% | Minimizes alert fatigue for faculty advisors |
+| **Accuracy** | 95.78% | Pipeline classification fidelity on synthetic distribution |
+| **Precision** | 85.71% | Minimizes alert fatigue for faculty advisors on synthetic data |
 | **Recall (Attention Risk)** | **91.14%** | Successfully flags >91% of simulated students needing support |
-| **F1-Score** | 89.44% | Harmonic mean confirming robust balance |
-| **ROC-AUC** | 0.9879 | High discrimination across confidence thresholds |
+| **F1-Score** | 88.34% | Harmonic mean confirming balanced performance on synthetic dataset |
+| **ROC-AUC** | **0.9874** (98.74%) | High discriminative ability across confidence thresholds on synthetic distribution |
+
+> ⚠️ **Scope Limitation:** These metrics are from synthetic demonstration data and do not establish real-world predictive validity. The 98.74% ROC-AUC metric confirms pipeline integrity and statistical separation under simulation, not real-world predictive validity for institutional student retention.
+
 
 ### Confusion Matrix (Test Set, N = 450)
-- True Negatives (`LOW_RISK` correct): 361
-- False Positives (`LOW_RISK` flagged as risk): 10
+- True Negatives (`LOW_RISK` correct): 359
+- False Positives (`LOW_RISK` flagged as risk): 12
 - False Negatives (`ATTENTION_RISK` missed): 7
 - True Positives (`ATTENTION_RISK` caught): 72
 
 ## 10. Calibration Assessment
 
-- **Brier Score:** `0.0372` (strong mean squared probability error on synthetic data, well below the 0.25 uninformative baseline)
-- **Expected Calibration Error (ECE, 10 Bins):** `0.0466`
+- **Brier Score:** `0.0399` (probabilistic calibration error on synthetic evaluation set, well below the 0.25 uninformative baseline)
+- **Expected Calibration Error (ECE, 10 Bins):** `0.0549`
 - **Reliability Assessment:** Standard random forest voting fractions display good alignment with empirical frequencies on synthetic data. Because tree ensembles can produce conservative probabilities near 0 and 1, outputs represent synthetic behavior and are not validated for real institutional certainty.
 
 ## 11. Explainability (SHAP TreeExplainer)

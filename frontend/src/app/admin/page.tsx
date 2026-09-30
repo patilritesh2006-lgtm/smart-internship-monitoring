@@ -485,13 +485,13 @@ export default function AdminPortal() {
               <strong className="text-xl font-black text-slate-900">
                 {lifecycle.completed_internships}
               </strong>
-              <span className="text-[10px] text-slate-500 mt-1">Term credit accredited</span>
+              <span className="text-[10px] text-slate-500 mt-1">Term credit verified</span>
             </div>
           </div>
 
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <span>Corporate Opportunity Pool: <strong>{analytics?.total_internships || 0} Total Listings</strong></span>
-            <span className="text-emerald-700 font-semibold">✓ 100% Real Database Lifecycle Records</span>
+            <span className="text-emerald-700 font-semibold">✓ Verified Database Lifecycle Records</span>
           </div>
         </GlassCard>
 
@@ -568,7 +568,7 @@ export default function AdminPortal() {
 
           <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-500 flex items-center justify-between">
             <span>Score threshold: &ge;75 On Track, 50–74 Monitor, &lt;50 Needs Attention</span>
-            <span className="text-blue-600 font-bold">100% Deterministic</span>
+            <span className="text-blue-600 font-bold">Deterministic Thresholds</span>
           </div>
         </GlassCard>
       </div>

@@ -18,8 +18,8 @@ This guide is written for judges, evaluators, and developers to run the complete
              SQLite Database
               internship.db
                      │
-     Deterministic Intelligence Engine
-  (4-Factor Attention Scoring & Skill Gap Analysis)
+     Explainable Hybrid Early-Warning Intelligence
+  (Deterministic Baseline + ML Early-Warning + SHAP)
 ```
 
 ---

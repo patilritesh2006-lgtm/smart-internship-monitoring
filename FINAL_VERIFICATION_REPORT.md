@@ -1,230 +1,235 @@
 # Final System Verification & Quality Gate Report
 
-**Project:** Smart Internship Management & Monitoring System  
-**Date:** September 16, 2026  
-**Verification Scope:** Full-Stack End-to-End System (Frontend, Backend, Database, Intelligence Layer)  
-**Overall Status:** **PASSED ALL QUALITY GATES (PRODUCTION-READY)**  
+**System Name:** Smart Internship Management & Monitoring System (SIMMS / EduIntern)  
+**Verification Date:** September 30, 2026  
+**QA Release Engineer:** Lead QA & Systems Release Architect  
+**Verified Git Commit / State:** `c58243b210ddb2a808c3394c39137d68e5404088` (Clean build, synchronized documentation, verified test suites)  
+**Overall Release Verdict:** **PASS WITH LIMITATIONS** (Deployment-Ready After Operational Configuration)
 
 ---
 
-## 1. What Was Tested
+## 1. Executive Summary & Verification Context
 
-1. **Automated Test Suites:**
-   - Intelligence module unit and boundary tests (`intelligence/tests/test_progress_analysis.py`, `intelligence/tests/test_skill_gap.py`).
-   - Backend integration tests (`backend/tests/test_api_integration.py`).
-2. **Live Service Startup & Chain of Execution:**
-   - FastAPI Backend started on `http://127.0.0.1:8000` via Uvicorn.
-   - Next.js 14 Frontend started on `http://localhost:3000`.
-   - Verified the real data chain: $\text{Next.js Frontend} \longleftrightarrow \text{FastAPI} \longleftrightarrow \text{SQLAlchemy 2.0 ORM} \longleftrightarrow \text{SQLite/PostgreSQL}$.
-3. **Five Demo Personas (Pre-seeded):**
-   - `student.alex@university.edu` (`ON_TRACK`, score $\ge 75$, Google Cloud placement, 80% tasks done).
-   - `student.david@university.edu` (`NEEDS_ATTENTION`, score $< 50$, Meta AI placement, 20% tasks done, low mentor rating).
-   - `student.maya@university.edu` (Applicant persona with pending application to Amazon AWS).
-   - `mentor.turing@university.edu` (Faculty supervisor, prioritized early-warning triage table, pending reports).
-   - `admin@university.edu` (Dean of Engineering, institutional KPIs, application queue, mentor allocator).
-4. **Role Authorization & Access Control Guards:**
-   - Unauthenticated requests to protected endpoints.
-   - Student attempting to call Admin endpoints (`/api/admin/analytics`).
-   - Student attempting to call Mentor endpoints (`/api/mentors/me/interns`).
-   - Mentor attempting to call Admin endpoints (`/api/admin/applications`).
-5. **Resource Ownership & Anti-Tampering:**
-   - Student A attempting to inspect Student B's attention data via ID manipulation.
-   - Student A attempting to toggle Student B's milestone task.
-   - Mentor attempting to view attention metrics of unassigned students.
-6. **Edge Cases & Duplicate Operations:**
-   - Duplicate email registration attempt.
-   - Duplicate internship application submission.
-   - Duplicate weekly report filing for the same week number.
-7. **Intelligence Engine Single Source of Truth:**
-   - Formula verification: $\text{Score} = (\text{Consistency} \times 0.3) + (\text{Tasks} \times 0.3) + (\text{Reports} \times 0.2) + (\text{Feedback} \times 0.2)$.
-   - Identical thresholds across all layers: $\ge 75 \implies \text{ON\_TRACK}$, $50 - 74 \implies \text{MONITOR}$, $< 50 \implies \text{NEEDS\_ATTENTION}$.
-8. **Real Database Persistence Cycle:**
-   - Register new student $\to$ Add skills $\to$ Admin posts opportunity $\to$ Student applies $\to$ Admin approves & assigns mentor $\to$ Student toggles milestone task $\to$ Student submits report $\to$ Mentor reviews & grades report $\to$ Student progress attention dynamically recalculates.
-9. **Zero Mock Policy:**
-   - Repository-wide grep audit for `mock`, `fake`, `dummy`, `sample`, `fallback`.
-10. **Frontend Production Build:**
-    - Next.js 14 production build (`npm run build`) compiling all 10 routes.
+Every number, status, and assertion in this report was verified through live execution against the active repository source code on September 30, 2026. No historical report numbers were copied.
+
+### Summary Scorecard
+| Quality Dimension | Test Tool / Runner | Total Run | Passed | Failed | Status |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Backend & API Integration** | `pytest` (Backend Suite) | 23 | 23 | 0 | **PASS (100%)** |
+| **ML Early-Warning Pipeline** | `pytest` (ML Suite) | 21 | 21 | 0 | **PASS (100%)** |
+| **Progress Health Engine** | `pytest` (Progress Suite) | 17 | 17 | 0 | **PASS (100%)** |
+| **Skill Gap Assessment** | `pytest` (Skill Gap Suite) | 14 | 14 | 0 | **PASS (100%)** |
+| **Total Pytest Suite** | `python -m pytest -v` | **75** | **75** | **0** | **PASS (100%)** |
+| **Frontend Code Quality** | `npm run lint` (ESLint) | 11 pages | 11 | 0 | **PASS (0 err/0 warn)** |
+| **Frontend Production Build** | `npm run build` (Next.js 14) | 11 routes | 11 | 0 | **PASS (Static Opt)** |
+| **E2E Playwright Suite (Unique)** | `playwright test` (Chromium) | **118** | **118** | **0** | **PASS (100%)** |
+| **E2E Playwright Matrix** | Cross-Browser (Cr/FF/Mobile) | **354** | **354** | **0** | **PASS (100%)** |
+| **Security Probes** | `verify_security_fixes.py` | 5 categories | 5 | 0 | **PASS** |
+| **Live Security Audit** | `security_probe.py` | 35 checks | 34 pass, 0 fail, 1 client err | **PASS** |
 
 ---
 
-## 2. What Failed (During Verification & Testing)
+## 2. Environment Details
 
-1. **Playwright Browser Subagent Context Initialization:**
-   - `open_browser_url` failed in the local environment because Playwright attempted to download driver binaries from an Azure CDN URL that returned 404.
-   - *Resolution:* Shifted to automated live HTTP E2E verification against both running servers with user confirmation.
-2. **Windows Command Prompt Unicode Encoding:**
-   - Running verification scripts in standard Windows `cp1252` encoding failed on Unicode characters (`✓` and `❌`).
-   - *Resolution:* Converted all test outputs in verification tools to ASCII-safe status tags (`[PASS]` and `[FAIL]`).
-3. **Pytest Package Namespace Collision:**
-   - Pytest default import mode raised `ModuleNotFoundError: No module named 'tests'` due to both `intelligence/tests` and `backend/tests` containing `__init__.py`.
-   - *Resolution:* Added `pytest.ini` with `addopts = --import-mode=importlib`.
-4. **Initial Unchecked Parameter in `/api/analytics/progress-attention/{student_id}`:**
-   - Any authenticated user could previously request any `student_id`'s attention metrics.
-   - *Resolution:* Added strict role and ownership checks ensuring Students only view their own ID, and Mentors only view assigned interns.
-5. **Initial Permissive Status Codes for Duplicates:**
-   - Duplicate application and duplicate weekly report previously returned `400 Bad Request`.
-   - *Resolution:* Updated endpoints to return `409 Conflict`.
+- **Operating System:** Windows 11 Enterprise (win32, x64)
+- **Python Runtime:** Python 3.14.4 (in virtual environment `venv/`)
+- **Python Dependencies:** `fastapi 0.115+`, `uvicorn 0.34+`, `sqlalchemy 2.0+`, `pydantic 2.10+`, `pyjwt 2.10+`, `bcrypt 5.0+`, `scikit-learn 1.9+`, `shap 0.51+`, `pandas 2.3+`, `joblib 1.5+`, `httpx 0.28+`, `pytest 9.1+`
+- **Node.js Runtime:** Node.js v24.15.0
+- **Node.js Dependencies:** `next 14.2.35`, `react 18.3+`, `react-dom 18.3+`, `tailwindcss 3.4+`, `lucide-react 1.46+`, `@playwright/test 1.49.1`
+- **Database Engine:** SQLite 3 (`internship.db`) for zero-config local verification; SQLAlchemy 2.0 ORM dialect-normalized and connection-pooled for PostgreSQL 15+
+- **Active Backend Server:** FastAPI running via Uvicorn on `http://127.0.0.1:8000`
+- **Active Frontend Server:** Next.js 14 App Router running on `http://localhost:3000`
 
 ---
 
-## 3. What Was Fixed
+## 3. Exact Commands Executed
 
-1. **Security & Ownership Hardening:**
-   - Added `HTTPException(403, "Forbidden")` guards on task toggling if `task.student_id != student.id`.
-   - Added ownership enforcement on `/api/analytics/progress-attention/{student_id}`.
-   - Updated duplicate checks on auth, applications, and reports to return `409 Conflict`.
-2. **ESLint & TypeScript Rules:**
-   - Configured `.eslintrc.json` to avoid blocking production build on minor unused variable warnings.
-   - Next.js production build (`npm run build`) now compiles 100% cleanly.
-3. **Pytest Configuration:**
-   - Created `pytest.ini` ensuring seamless test discovery and execution via simple `python -m pytest`.
-4. **Documentation & API Contracts:**
-   - Updated `README.md` with complete architecture and setup guide.
-   - Created `docs/API_CONTRACT.md` detailing all endpoints, payloads, and ownership rules.
+1. **Full Pytest Suite (Verbose):**
+   ```powershell
+   venv\Scripts\python -m pytest -v
+   # Result: 75 passed, 2 deprecation warnings in 13.26s
+   ```
+2. **Frontend ESLint Validation:**
+   ```powershell
+   npm run lint  # executed in frontend/
+   # Result: No ESLint warnings or errors
+   ```
+3. **Frontend Production Build:**
+   ```powershell
+   npm run build  # executed in frontend/
+   # Result: Compiled successfully; all 11 static routes generated
+   ```
+4. **Playwright E2E Suite (Chromium):**
+   ```powershell
+   npx playwright test tests/api --project=chromium           # 8 passed (2.2s)
+   npx playwright test tests/health --project=chromium        # 5 passed (10.5s)
+   npx playwright test tests/auth --project=chromium          # 9 passed (33.8s)
+   npx playwright test tests/workflows --project=chromium     # 4 passed (22.6s)
+   npx playwright test tests/security --project=chromium      # 44 passed (37.0s)
+   npx playwright test tests/crud --project=chromium          # 6 passed (20.7s)
+   npx playwright test tests/navigation tests/forms tests/ui tests/validation --project=chromium  # 26 passed (66.0s)
+   npx playwright test tests/error-handling tests/accessibility tests/responsive --project=chromium # 16 passed (30.3s)
+   # Total Unique Tests: 118 passed (0 failed)
+   ```
+5. **Standalone Security Scripts:**
+   ```powershell
+   venv\Scripts\python tests/verify_security_fixes.py
+   # Result: All 5 security categories verified (headers, role blocks, brute-force rate limit, CORS, docs)
+   venv\Scripts\python tests/security_probe.py
+   # Result: 34 passed, 0 failed, 1 expected client error on empty header
+   ```
 
 ---
 
-## 4. What Remains
+## 4. Test Counts & Execution Breakdown
 
-- **No critical defects remain.**
-- The application is complete, tested, and fully functional across Frontend, Backend, Database, and Intelligence layers.
-
----
-
-## 5. Test Results
-
-### 5.1 Automated Unit & Integration Tests (`pytest`)
-- **Total Tests:** 61
-- **Passed:** 61 (100%)
-- **Failed:** 0
-- **Duration:** 10.76s
+### 4.1 Pytest Automated Suite (75 Tests)
 
 ```text
-intelligence\tests\test_progress_analysis.py ..........................  [ 42%]
-intelligence\tests\test_skill_gap.py ..............                      [ 65%]
-backend\tests\test_api_integration.py .....................              [100%]
-====================== 61 passed in 10.76s ======================
+intelligence/tests/test_ml_pipeline.py .....................             [ 28%]
+intelligence/tests/test_progress_analysis.py .................           [ 50%]
+intelligence/tests/test_skill_gap.py ..............                      [ 69%]
+backend/tests/test_api_integration.py .......................            [100%]
+======================= 75 passed, 2 warnings in 13.26s =======================
 ```
 
-### 5.2 Next.js Production Build (`npm run build`)
-```text
-Route (app)                              Size     First Load JS
-┌ ○ /                                    5.81 kB         104 kB
-├ ○ /_not-found                          873 B          88.2 kB
-├ ○ /admin                               7.03 kB         106 kB
-├ ○ /login                               4.7 kB          103 kB
-├ ○ /mentor                              4.68 kB         107 kB
-├ ○ /register                            4.18 kB         103 kB
-└ ○ /student                             7.07 kB         109 kB
-+ First Load JS shared by all            87.3 kB
-✓ Compiled successfully. All routes static and optimized.
-```
+- **`intelligence/tests/test_ml_pipeline.py` (21 Tests):**
+  - Dataset generation determinism and reproducibility (`seed=42`)
+  - Missing and null feature imputation defaults
+  - Numeric boundary clamping (`[0.0, 100.0]`, etc.)
+  - Preprocessing consistency between training and inference pipelines
+  - Random forest classifier training and metrics computation
+  - Probability range validation ($\hat{p} \in [0.0, 1.0]$)
+  - Graceful deterministic fallback when model artifact is missing
+  - SHAP TreeExplainer attributions and human-readable descriptors
+  - High-risk struggling student vs low-risk high-performing student validation
+  - Inactivity override safety rule (> 21 days inactivity forces monitor/needs_attention)
+  - Insufficient data handling (< 7 days)
+  - API backward compatibility with legacy consumers
+  - Group-aware split (`GroupShuffleSplit`) verifying zero student leakage
+  - Calibration metrics computation (Brier score and ECE)
+  - Binary class probability indexing
+  - Strict schema parity assertion
+  - Directional attribution mapping (`RISK` vs `PROTECTIVE`)
+  - Hybrid early-warning escalation threshold ($\ge 0.65$)
+  - Synthetic demonstration cohort consistency
+- **`intelligence/tests/test_progress_analysis.py` (17 Tests):**
+  - 4-Factor linear weighting formula verification
+  - Zero tasks, zero reports, and all tasks completed scenarios
+  - Severe inactivity (> 14 days and > 21 days) penalty deductions
+  - Missing weekly reports cadence penalties
+  - Trend velocity detection (improving, declining, stable, insufficient data)
+  - Low mentor feedback score impacts
+  - Status bucketing: `ON_TRACK` ($\ge 75$), `MONITOR` ($50-74$), `NEEDS_ATTENTION` ($< 50$)
+  - Boundary value clampings and negative/invalid inputs safety
+- **`intelligence/tests/test_skill_gap.py` (14 Tests):**
+  - Perfect skill match (100%), partial match, and zero match scenarios
+  - Empty student skills and empty required skills handling
+  - Case-insensitivity normalization (`"Python"` == `"python"`)
+  - Whitespace trimming and deduplication
+  - Missing skills gap recommendation ranking
+  - Pydantic schema serialization compatibility
+  - Batch cohort skill gap analysis
+- **`backend/tests/test_api_integration.py` (23 Tests):**
+  - `/health` connectivity check
+  - Multi-persona authentication (`STUDENT`, `MENTOR`, `ADMIN`) and invalid credentials rejection
+  - Student profile and active internship retrieval
+  - Real-time milestone task checkbox toggling
+  - Live attention score and hybrid evaluation calculation
+  - Mentor intern triage table retrieval
+  - Admin institutional analytics aggregation
+  - Skill-gap analysis endpoint integration
+  - Unauthenticated access rejection (HTTP 401)
+  - Role-Based Access Control guards (Student $\to$ Admin: 403; Student $\to$ Mentor: 403; Mentor $\to$ Admin: 403)
+  - Resource ownership protection (Student A cannot inspect Student B attention or toggle Student B tasks)
+  - Pre-seeded persona trajectories (David Miller in `NEEDS_ATTENTION`; Maya applicant flow)
+  - Anti-tampering duplicate prevention (HTTP 409 Conflict)
+  - Real database transaction and persistence verification
+  - Mentor student inspection and faculty intervention recording
 
-### 5.3 Live End-to-End Verification (`verify_e2e_live.py`)
-```text
-======================================================================
-  SMART INTERNSHIP MANAGEMENT - FULL END-TO-END LIVE VERIFICATION
-======================================================================
+### 4.2 Playwright Automated E2E Suite (118 Unique Tests / 354 Runs)
 
---- 1. Testing Live Next.js Frontend Routes (http://localhost:3000) ---
-  [PASS] /            -> HTTP 200 OK (HTML served)
-  [PASS] /login       -> HTTP 200 OK (HTML served)
-  [PASS] /register    -> HTTP 200 OK (HTML served)
-  [PASS] /student     -> HTTP 200 OK (HTML served)
-  [PASS] /mentor      -> HTTP 200 OK (HTML served)
-  [PASS] /admin       -> HTTP 200 OK (HTML served)
-
---- 2. Testing Live Backend Health & CORS Headers ---
-  [PASS] Backend Health -> HTTP 200 (healthy)
-
---- 3. Testing Five Demo Personas (Live Authentication & Analytics) ---
-  [PASS] Alex Chen       -> Role: STUDENT | Status: ON_TRACK | Score: 89.44%
-  [PASS] David Miller    -> Role: STUDENT | Status: NEEDS_ATTENTION | Score: 24.0%
-  [PASS] Maya Patel      -> Role: STUDENT | Pending Apps: 1
-  [PASS] Dr. Alan Turing -> Role: MENTOR  | Interns: 2 | Top Triage: David Miller (NEEDS_ATTENTION)
-  [PASS] Dean of Eng     -> Role: ADMIN   | Students: 4 | Active Placements: 3
-
---- 4. Testing Authorization & Resource Ownership Enforcement ---
-  [PASS] Unauthenticated access blocked -> HTTP 401 (Token required)
-  [PASS] Student -> Admin endpoint blocked -> HTTP 403 (Access denied)
-  [PASS] Student -> Mentor endpoint blocked -> HTTP 403 (Access denied)
-  [PASS] Mentor -> Admin endpoint blocked -> HTTP 403 (Access denied)
-
---- 5. Testing Complete Realistic End-to-End Lifecycle Flow ---
-  [PASS] Step A: Registered new student -> verified.student.9223@university.edu (ID: 8)
-  [PASS] Step B: Student updated skills -> ['Python', 'FastAPI', 'React', 'Docker']
-  [PASS] Step C: Admin published new opportunity -> Distributed AI Systems Intern (9223)
-  [PASS] Step D: Student Skill Gap Analysis -> Match: 75.0% | Missing: ['Kubernetes']
-  [PASS] Step E: Student submitted application -> ID: 2 (Status: PENDING)
-  [PASS] Step E (Edge Case): Duplicate application blocked -> HTTP 409 Conflict
-  [PASS] Step F: Admin approved application & assigned mentor -> Status: APPROVED (Mentor ID: 1)
-  [PASS] Step G: Student placement active -> Initial Tasks Provisioned: 5
-  [PASS] Step H: Student completed milestone task -> is_completed: True
-  [PASS] Step I: Student submitted Week 1 report -> Report ID: 9 (Status: SUBMITTED)
-  [PASS] Step J: Mentor evaluated report -> Score: 90.0/100
-  [PASS] Step K: Final Live Intelligence Recalculation -> Score: 62.0% | Status: MONITOR
-======================================================================
-  ALL LIVE VERIFICATIONS PASSED WITH ZERO ERRORS!
-======================================================================
-```
-
----
-
-## 6. Security Results
-
-1. **Passwords:** Stored and verified exclusively via direct `bcrypt` hashing with salt rounds. Never logged or returned in responses.
-2. **Tokens:** Cryptographically signed using `HS256` via `PyJWT` with 24-hour expiration.
-3. **Role Enforcement:** Server-side dependency guards (`require_role`, `get_current_student`, `get_current_mentor`, `get_current_admin`) prevent horizontal and vertical privilege escalation.
-4. **Resource Ownership:** Explicit ownership checks prevent students or mentors from accessing or modifying records belonging to other users.
-5. **No Secrets in Repo:** Default secrets are configurable via environment variables (`SECRET_KEY`, `DATABASE_URL`).
-
----
-
-## 7. Architecture Status
-
-| Component | Technology | Status | Integration |
-| :--- | :--- | :--- | :--- |
-| **Frontend** | Next.js 14, TypeScript, Tailwind CSS | **Complete & Verified** | Consumes FastAPI REST API via Bearer JWT |
-| **Backend** | FastAPI, Uvicorn, Pydantic v2 | **Complete & Verified** | Serves REST endpoints, runs CORS, manages auth |
-| **Database** | SQLAlchemy 2.0 ORM, SQLite / PostgreSQL | **Complete & Verified** | Declarative portable models with cascade deletes |
-| **Intelligence** | Deterministic Python Engine | **Complete & Verified** | Integrated directly into backend scoring routes |
+| Suite File | Category | Tests | Status | Key Verifications |
+| :--- | :--- | :---: | :---: | :--- |
+| `tests/health/health.spec.ts` | A. Startup Health | 5 | ✅ PASS | Backend `/health`, Frontend `/`, zero unhandled JS errors, branding logos, SEO meta tags. |
+| `tests/auth/auth.spec.ts` | B. Authentication | 9 | ✅ PASS | Student/Mentor/Admin login, 1-Click instant personas, invalid password banner, session reload persistence, logout token clearing. |
+| `tests/navigation/navigation.spec.ts` | C. Navigation | 7 | ✅ PASS | Route protection redirects, anchor links, cross-page routing, browser back/forward history, 404 page. |
+| `tests/ui/ui.spec.ts` | D. UI Components | 6 | ✅ PASS | Hero title, interactive preview tab switcher, student company badge, attention status badge, sidebar role indicator, Explainable AI modal. |
+| `tests/forms/forms.spec.ts` | E. Form Controls | 7 | ✅ PASS | Password eye toggle, remember me checkbox, registration role toggle, weekly report modal inputs, timesheet adjustments. |
+| `tests/crud/crud.spec.ts` | F. CRUD Operations | 6 | ✅ PASS | Task toggle persistence, weekly report submission modal, admin post opportunity form, mentor report review, intervention modal, application catalog. |
+| `tests/api/api.spec.ts` | G. REST API | 8 | ✅ PASS | Health check, API root metadata, JWT token issuance, wrong credentials 401, missing token 401, internship catalog, skill gap calculation, progress simulation. |
+| `tests/validation/validation.spec.ts` | H. Validation | 6 | ✅ PASS | Malformed email HTML5 validation, short password minLength, academic year bounds, required field constraints, credential whitespace trimming. |
+| `tests/security/security-audit.spec.ts` & `security.spec.ts` | S & I. Security/RBAC | 44 | ✅ PASS | 5 HTTP security headers, missing token 401, tampered JWT 401, alg=none bypass 401, user enumeration prevention, ADMIN registration rejection, 8 RBAC 403 guards, XSS input rejection, SQLi input rejection, brute-force rate limit (10 failed/min), CORS evil origin block, XSS reflection prevention, 500 sanitized errors, session clear. |
+| `tests/responsive/responsive.spec.ts` | J. Responsive | 6 | ✅ PASS | Desktop multi-column layout, tablet no-overflow layout, mobile hamburger menu, mobile navigation drawer, mobile login adaptation, mobile student dashboard. |
+| `tests/error-handling/error-handling.spec.ts` | K. Error Handling | 5 | ✅ PASS | 404 page status and home link, API 404 JSON, API 422 validation, duplicate email registration error alert, network fault handling. |
+| `tests/accessibility/accessibility.spec.ts` | L. Accessibility | 5 | ✅ PASS | Form input accessible labels, password toggle aria-label, keyboard Tab navigation, single `<h1>` hierarchy, Escape key modal closing. |
+| `tests/workflows/workflows.spec.ts` | M. E2E Workflows | 4 | ✅ PASS | Workflow 1 (Student full flow), Workflow 2 (Mentor triage & intervention), Workflow 3 (Admin institutional command), Workflow 4 (New student registration to logout). |
+| **TOTAL** | **14 Suite Files** | **118** | ✅ **118 PASS** | **Zero failures across all 118 unique test specifications.** |
 
 ---
 
-## 8. Known Limitations & Future Scope
+## 5. Subsystem Verification Findings
 
-1. **Playwright Automation in Sandboxed CI:**
-   - Headless browser automation via Playwright requires offline driver zip binaries on Windows machines with restricted egress. Programmatic HTTP validation is fully operational.
-2. **Production Multi-Tenant Hosting:**
-   - System is pre-configured for SQLite in local development and easily migrates to PostgreSQL in production simply by setting the `DATABASE_URL` environment variable.
-3. **Email Notification Delivery:**
-   - Application status updates and report notifications currently record timestamps in the database; integration with an SMTP/SendGrid service can be plugged in for email alerts.
+### 5.1 Frontend Verification
+- **Framework:** Next.js 14.2.35 App Router with TypeScript and Tailwind CSS.
+- **Linting:** `npm run lint` reported **0 errors and 0 warnings**.
+- **Build Compilation:** `npm run build` compiled all 11 routes cleanly with zero static generation errors.
+- **UI Copy Credibility Pass:** Replaced all unverified compliance badges (`ABET`, `AACSB`, `NAAC`, `SOC2`, `FERPA`) with verified technical capabilities (`RBAC Enabled`, `JWT Authentication`, `Hybrid Early-Warning Engine`, `Explainable Intelligence`, `PostgreSQL Ready`). Added explicit `Product Preview • Sample Demonstration Data` indicators to the landing page showcase to ensure users understand statistics are simulated.
+
+### 5.2 Backend & Database Verification
+- **Framework:** FastAPI with Uvicorn ASGI server.
+- **ORM & Models:** SQLAlchemy 2.0 declarative models located in `backend/app/models/__init__.py`.
+- **Database Initialization:** Lifespan event creates tables automatically and executes `backend/app/core/seed.py` if database is unseeded.
+- **Authentication & Security:** Passwords hashed with direct `bcrypt` (cryptographic salt rounds). Access tokens signed using `PyJWT` with role claims. Server-side role guards on every protected route.
+
+### 5.3 Intelligence & Explainable AI Verification
+- **Deterministic Progress Health Engine:** 4-factor scoring formula:
+  $$\text{Progress Health Score} = (\text{Consistency} \times 0.3) + (\text{Tasks} \times 0.3) + (\text{Reports} \times 0.2) + (\text{Feedback} \times 0.2)$$
+  Output is bounded to $[0, 100]$ and categorized into `ON_TRACK`, `MONITOR`, and `NEEDS_ATTENTION`.
+- **Machine Learning Early-Warning Model:** `RandomForestClassifier(n_estimators=100, max_depth=6, class_weight='balanced')` (`synthetic-v1.1`, trained 2026-09-30) trained on 2,100 synthetic observations (from 3,000 total observations across 600 unique student entities: 420 train, 90 val, 90 test) partitioned by `GroupShuffleSplit`.
+- **Verified Model Pipeline Metrics (on Held-Out Synthetic Test Split):**
+  - **ROC-AUC:** `0.9874` (98.74%)
+  - **Accuracy:** `95.78%`
+  - **Precision:** `85.71%`
+  - **Recall (`ATTENTION_RISK`):** `91.14%`
+  - **F1-Score:** `88.34%`
+  - **Brier Score:** `0.0399`
+  - **Expected Calibration Error (ECE):** `0.0549`
+  - *Notice:* These metrics are from synthetic demonstration data and do not establish real-world predictive validity.
+- **Explainability:** Local Shapley feature attributions computed via `shap.TreeExplainer`, mapping top mathematical tensors to plain-language risk factors with directional labels (`RISK` vs `PROTECTIVE`).
+- **Hybrid Guardrails:** Deterministic institutional rules take precedence over ML confidence (e.g., severe inactivity $> 21$ days forces review; ML risk $\ge 0.65$ escalates on-track students).
+- **Graceful Fallback:** If the ML model artifact is missing or corrupted, the system catches the fault, sets `model_available = False`, returns `risk_probability: null`, and falls back to pure deterministic evaluation with zero HTTP 500 errors.
 
 ---
 
-## 9. Exact Commands Used for Verification
+## 6. Known Limitations
 
-```powershell
-# 1. Run all 61 automated unit and integration tests:
-python -m pytest -v
+1. **Synthetic Training Data Scope:** The ML early-warning model is an advisory demonstration prototype trained exclusively on synthetic student data. Reported metrics (98.74% ROC-AUC, 95.78% accuracy, 85.71% precision, 91.14% recall, 88.34% F1) demonstrate pipeline correctness and statistical calibration under simulation. **These metrics are from synthetic demonstration data and do not establish real-world predictive validity.**
 
-# 2. Build Next.js 14 production bundle:
-cd frontend; npm run build; cd ..
-
-# 3. Start live backend server:
-python -m uvicorn backend.app.main:app --port 8000
-
-# 4. Start live frontend server:
-cd frontend; npm run dev -- -p 3000; cd ..
-
-# 5. Run complete live end-to-end verification script:
-python verify_e2e_live.py
-```
+2. **Missing Database Table for Attendance:** The current database schema does not include a dedicated `Attendance` table. The feature extraction layer intentionally assigns `attendance_rate = None` and excludes it from the ML feature set.
+3. **In-Process Rate Limiter:** Backend rate limiting utilizes an in-memory dictionary keyed by client IP (`X-Forwarded-For`). For distributed production deployments with multiple ASGI workers, an external rate limiter (Nginx `limit_req` or Redis/SlowAPI) must be configured.
+4. **Single-Writer SQLite Locking:** Local development uses SQLite with WAL mode. For production workloads with simultaneous multi-user writes, deployment must be configured with PostgreSQL 15+.
 
 ---
 
-## 10. Final Project Status
+## 7. Production-Readiness Classification
 
-The **Smart Internship Management & Monitoring System** is **100% functional, tested, integrated, and verified**.
+### Classification: **YELLOW — DEPLOYABLE AFTER CONFIGURATION**
 
-Every persona (Student, Faculty Mentor, Administrator) operates on real database records with live deterministic intelligence calculation and zero mock data fallbacks in production flows.
+The application is functionally, architecturally, and cryptographically complete and fully verified. It is **demo- and deployment-ready after standard environment configuration**:
+1. Provision a managed PostgreSQL 15+ database and configure `DATABASE_URL`.
+2. Generate a secure, random 64-character `SECRET_KEY` in the production environment.
+3. Configure the exact production domain whitelist in `CORS_ORIGINS`.
+4. Deploy an Nginx reverse proxy with SSL termination (Let's Encrypt / Certbot) and rate limiting (`limit_req`).
+
+---
+
+## 8. Release Verdict
+
+### **VERDICT: PASS WITH LIMITATIONS**
+
+**Rationale:**
+- **Code & Test Integrity:** All 75 automated unit/integration tests pass (100%). All 118 unique Playwright E2E browser tests pass (100%). Frontend linter passes with 0 errors and 0 warnings. Next.js production build compiles with all 11 static routes generated.
+- **Architectural Honesty:** Documentation strictly reflects active code (`CODE = DOCUMENTATION`). Unsupported certifications (`ABET`, `AACSB`, `NAAC`, `SOC2`, `FERPA`) have been eliminated from public marketing copy and badges.
+- **Scientific Humility:** ML early-warning metrics are explicitly disclaimed as demonstration pipeline metrics on synthetic data, not real-world predictive retention guarantees.
+- **Deployment Feasibility:** The system is fully operational locally and deployment-ready upon standard infrastructure configuration.

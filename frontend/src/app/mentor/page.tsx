@@ -584,7 +584,7 @@ export default function MentorPortal() {
 
               <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 flex items-center justify-between">
                 <span>Deterministic rules • Evidence-based</span>
-                <span className="text-blue-600 font-bold">100% Explainable</span>
+                <span className="text-blue-600 font-bold">Fully Explainable</span>
               </div>
             </GlassCard>
           </div>
