@@ -123,8 +123,13 @@ def evaluate_hybrid_attention(
         if inactivity_note not in reasons:
             reasons.append(inactivity_note)
 
-    # Rule B: ML Early-Warning Escalation
-    if model_available and risk_prob is not None:
+    # Rule B: ML Early-Warning Escalation (only when student is past initial onboarding or has real risk signals)
+    is_clean_early_stage = bool(
+        getattr(features, "is_early_stage", False)
+        and getattr(features, "overdue_tasks", 0) == 0
+        and getattr(features, "missing_reports", 0) == 0
+    )
+    if model_available and risk_prob is not None and not is_clean_early_stage:
         # If deterministic looks ON_TRACK but ML detects strong leading risk signals
         if final_status == AttentionStatus.ON_TRACK.value and risk_prob >= 0.65:
             final_status = AttentionStatus.MONITOR.value

@@ -99,7 +99,7 @@ export function Sidebar({
           items: [
             { id: "overview",    label: "Dashboard",   icon: <LayoutDashboard size={17} /> },
             { id: "internships", label: "Applications",icon: <Briefcase size={17} /> },
-            { id: "timesheets",  label: "Timesheets",  icon: <Clock size={17} />, badge: "Week 8", badgeCls: "bg-blue-600 text-white" },
+            { id: "timesheets",  label: "Timesheets",  icon: <Clock size={17} /> },
             { id: "feedback",    label: "Evaluations", icon: <Award size={17} /> },
             { id: "messages",    label: "Messages",    icon: <MessageSquare size={17} />, hasDot: true },
           ],
@@ -112,8 +112,8 @@ export function Sidebar({
           sectionTitle: "MAIN MENU",
           items: [
             { id: "overview",   label: "Overview / Dashboard", icon: <LayoutDashboard size={17} /> },
-            { id: "students",   label: "Assigned Students",     icon: <Users size={17} />, badge: "24", badgeCls: "bg-slate-100 text-slate-700" },
-            { id: "reports",    label: "Report Reviews",       icon: <CheckSquare size={17} />, badge: "2 Pending", badgeCls: "bg-amber-100 text-amber-800 font-bold" },
+            { id: "students",   label: "Assigned Students",     icon: <Users size={17} /> },
+            { id: "reports",    label: "Report Reviews",       icon: <CheckSquare size={17} /> },
             { id: "evaluations",label: "Evaluations",          icon: <Award size={17} /> },
             { id: "messages",   label: "Messages",             icon: <MessageSquare size={17} />, hasDot: true },
           ],
@@ -132,8 +132,8 @@ export function Sidebar({
       {
         sectionTitle: "OVERSIGHT & MANAGEMENT",
         items: [
-          { id: "overview",     label: "Command Center",     icon: <LayoutDashboard size={17} />, badge: "3", badgeCls: "bg-blue-600 text-white" },
-          { id: "agreements",   label: "Agreements & Review",icon: <FileText size={17} />, badge: "14", badgeCls: "bg-amber-100 text-amber-800 font-bold" },
+          { id: "overview",     label: "Command Center",     icon: <LayoutDashboard size={17} /> },
+          { id: "agreements",   label: "Agreements & Review",icon: <FileText size={17} /> },
           { id: "cohorts",      label: "Student Cohorts",    icon: <Users size={17} /> },
           { id: "employers",    label: "Partner Employers",  icon: <Building2 size={17} /> },
           { id: "logbooks",     label: "Logbooks & Hours",   icon: <Clock size={17} /> },

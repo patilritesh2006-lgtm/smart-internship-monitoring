@@ -50,7 +50,7 @@ npm --version
 Open **PowerShell Window #1**, navigate to the project directory, and run:
 
 ```powershell
-cd c:\Users\Rajnandini\Desktop\smart-internship-management
+cd C:\Users\<YourUsername>\Desktop\smart-internship-monitoring
 
 # 1. (Optional) Create and activate a Python virtual environment
 python -m venv venv
@@ -81,7 +81,7 @@ python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 Open **PowerShell Window #2**, navigate to the `frontend` folder, and run:
 
 ```powershell
-cd c:\Users\Rajnandini\Desktop\smart-internship-management\frontend
+cd C:\Users\<YourUsername>\Desktop\smart-internship-monitoring\frontend
 
 # 1. Install Node.js dependencies (only needed first time)
 npm install

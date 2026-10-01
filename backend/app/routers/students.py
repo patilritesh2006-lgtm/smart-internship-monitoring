@@ -7,13 +7,19 @@ from backend.app.core.deps import get_current_student
 from backend.app.models import (
     Application,
     Internship,
+    Mentor,
+    Notification,
     Student,
     StudentSkill,
     Task,
     User,
     WeeklyReport,
 )
-from backend.app.routers.internships import format_internship_out
+from backend.app.routers.internships import (
+    build_application_out,
+    format_internship_out,
+    format_task_out,
+)
 from backend.app.schemas import (
     ApplicationOut,
     InternshipOut,
@@ -31,11 +37,25 @@ from intelligence.app import evaluate_progress_attention, extract_progress_featu
 router = APIRouter(prefix="/students", tags=["Students"])
 
 
-@router.get("/me", response_model=StudentOut)
-def get_my_profile(student_ctx=Depends(get_current_student), db: Session = Depends(get_db)):
-    """Returns the current student profile and skills."""
-    user, student = student_ctx
+def _format_student_profile(user: User, student: Student, db: Session) -> StudentOut:
     skills = [s.skill_name for s in student.skills]
+    active_int = (
+        db.query(Internship)
+        .filter(Internship.student_id == student.id)
+        .order_by(Internship.id.asc())
+        .first()
+    )
+    latest_app = (
+        db.query(Application)
+        .filter(Application.student_id == student.id)
+        .order_by(Application.applied_at.desc())
+        .first()
+    )
+
+    mentor = student.assigned_mentor
+    if not mentor and active_int and active_int.mentor:
+        mentor = active_int.mentor
+
     return StudentOut(
         id=student.id,
         user_id=user.id,
@@ -46,7 +66,30 @@ def get_my_profile(student_ctx=Depends(get_current_student), db: Session = Depen
         full_name=user.full_name,
         email=user.email,
         skills=skills,
+        mentor_id=mentor.id if mentor else None,
+        mentor_code=mentor.employee_id if mentor else None,
+        mentor_employee_id=mentor.employee_id if mentor else None,
+        mentor_name=mentor.user.full_name if mentor and mentor.user else None,
+        mentor_email=mentor.user.email if mentor and mentor.user else None,
+        mentor_department=mentor.department if mentor else None,
+        mentor_designation=mentor.designation if mentor else None,
+        internship_id=active_int.id if active_int else (latest_app.internship_id if latest_app else None),
+        internship_title=active_int.title if active_int else (latest_app.internship.title if latest_app and latest_app.internship else None),
+        company_name=(
+            active_int.company.name
+            if active_int and active_int.company
+            else (latest_app.internship.company.name if latest_app and latest_app.internship and latest_app.internship.company else None)
+        ),
+        internship_status=active_int.status if active_int else None,
+        application_status=latest_app.status if latest_app else None,
     )
+
+
+@router.get("/me", response_model=StudentOut)
+def get_my_profile(student_ctx=Depends(get_current_student), db: Session = Depends(get_db)):
+    """Returns the current student profile, assigned mentor, and skills."""
+    user, student = student_ctx
+    return _format_student_profile(user, student, db)
 
 
 @router.put("/me", response_model=StudentOut)
@@ -78,18 +121,7 @@ def update_my_profile(
     db.commit()
     db.refresh(student)
 
-    skills = [s.skill_name for s in student.skills]
-    return StudentOut(
-        id=student.id,
-        user_id=user.id,
-        roll_number=student.roll_number,
-        department=student.department,
-        academic_year=student.academic_year,
-        phone=student.phone,
-        full_name=user.full_name,
-        email=user.email,
-        skills=skills,
-    )
+    return _format_student_profile(user, student, db)
 
 
 @router.get("/me/internship", response_model=Optional[InternshipOut])
@@ -102,6 +134,7 @@ def get_my_active_internship(
     internship = (
         db.query(Internship)
         .filter(Internship.student_id == student.id, Internship.status == "ACTIVE")
+        .order_by(Internship.id.asc())
         .first()
     )
     if not internship:
@@ -114,7 +147,7 @@ def get_my_applications(
     student_ctx=Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    """Lists all internship applications submitted by the student."""
+    """Lists all internship applications submitted by the student with skill match/gap and tasks."""
     _, student = student_ctx
     apps = (
         db.query(Application)
@@ -122,24 +155,7 @@ def get_my_applications(
         .order_by(Application.applied_at.desc())
         .all()
     )
-    result = []
-    for a in apps:
-        result.append(
-            ApplicationOut(
-                id=a.id,
-                student_id=student.id,
-                student_name=student.user.full_name,
-                student_email=student.user.email,
-                internship_id=a.internship_id,
-                internship_title=a.internship.title if a.internship else "Unknown",
-                company_name=a.internship.company.name if a.internship and a.internship.company else "Unknown",
-                status=a.status,
-                applied_at=a.applied_at,
-                reviewed_at=a.reviewed_at,
-                review_notes=a.review_notes,
-            )
-        )
-    return result
+    return [build_application_out(db, a) for a in apps]
 
 
 @router.get("/me/tasks", response_model=List[TaskOut])
@@ -155,17 +171,18 @@ def get_my_tasks(
         .order_by(Task.is_completed.asc(), Task.created_at.asc())
         .all()
     )
-    return tasks
+    return [format_task_out(t) for t in tasks]
 
 
 @router.post("/me/tasks/{task_id}/toggle", response_model=TaskOut)
+@router.patch("/me/tasks/{task_id}/toggle", response_model=TaskOut)
 def toggle_task_completion(
     task_id: int,
     student_ctx=Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    """Toggles completion status for a task assigned to the student."""
-    _, student = student_ctx
+    """Toggles completion status for a task assigned to the student and notifies Mentor on completion."""
+    user, student = student_ctx
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -177,9 +194,29 @@ def toggle_task_completion(
 
     task.is_completed = not task.is_completed
     task.completed_at = datetime.now(timezone.utc) if task.is_completed else None
+    task.status = "COMPLETED" if task.is_completed else "PENDING"
+
+    if task.is_completed:
+        target_mentor_id = student.mentor_id or getattr(task, "mentor_id", None)
+        if not target_mentor_id and task.internship:
+            target_mentor_id = task.internship.mentor_id
+        if target_mentor_id:
+            mentor = db.query(Mentor).filter(Mentor.id == target_mentor_id).first()
+            if mentor and mentor.user_id:
+                int_title = task.internship.title if task.internship else "Internship"
+                db.add(
+                    Notification(
+                        user_id=mentor.user_id,
+                        title="Student Completed Internship Task",
+                        message=f"{user.full_name} completed task '{task.title}' ({int_title}).",
+                        notification_type="TASK_COMPLETED",
+                        is_read=False,
+                    )
+                )
+
     db.commit()
     db.refresh(task)
-    return task
+    return format_task_out(task)
 
 
 @router.get("/me/reports", response_model=List[WeeklyReportOut])
@@ -204,17 +241,31 @@ def submit_weekly_report(
     student_ctx=Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    """Submits a new weekly progress report."""
-    _, student = student_ctx
+    """Submits a new weekly progress report and notifies the assigned Mentor."""
+    user, student = student_ctx
     internship = (
         db.query(Internship)
         .filter(Internship.student_id == student.id, Internship.status == "ACTIVE")
+        .order_by(Internship.id.asc())
         .first()
     )
     if not internship:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="You do not have an active internship to submit reports for",
+        )
+
+    clean_evidence = payload.evidence_url.strip() if payload.evidence_url and payload.evidence_url.strip() else None
+    if not clean_evidence and "Evidence Reference:" in (payload.achievements or ""):
+        for line in (payload.achievements or "").splitlines():
+            if "Evidence Reference:" in line:
+                clean_evidence = line.split("Evidence Reference:", 1)[1].strip()
+                break
+
+    if payload.require_evidence and not clean_evidence:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Evidence URL / Artifact Reference is compulsory for weekly report submission",
         )
 
     existing = (
@@ -234,10 +285,26 @@ def submit_weekly_report(
         week_number=payload.week_number,
         achievements=payload.achievements,
         challenges=payload.challenges,
+        evidence_url=clean_evidence,
         hours_spent=payload.hours_spent,
         status="SUBMITTED",
     )
     db.add(report)
+
+    target_mentor_id = student.mentor_id or internship.mentor_id
+    if target_mentor_id:
+        mentor = db.query(Mentor).filter(Mentor.id == target_mentor_id).first()
+        if mentor and mentor.user_id:
+            db.add(
+                Notification(
+                    user_id=mentor.user_id,
+                    title=f"Weekly Report Submitted: Week {payload.week_number}",
+                    message=f"{user.full_name} submitted Week {payload.week_number} progress report for {internship.title}.",
+                    notification_type="REPORT_SUBMITTED",
+                    is_read=False,
+                )
+            )
+
     db.commit()
     db.refresh(report)
     return report
@@ -259,13 +326,18 @@ def compute_student_attention_metrics(student_id: int, db: Session) -> ProgressA
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    tasks = db.query(Task).filter(Task.student_id == student_id).all()
-    reports = db.query(WeeklyReport).filter(WeeklyReport.student_id == student_id).all()
     internship = (
         db.query(Internship)
         .filter(Internship.student_id == student_id, Internship.status == "ACTIVE")
+        .order_by(Internship.id.asc())
         .first()
     )
+    if internship:
+        tasks = db.query(Task).filter(Task.student_id == student_id, Task.internship_id == internship.id).all()
+        reports = db.query(WeeklyReport).filter(WeeklyReport.student_id == student_id, WeeklyReport.internship_id == internship.id).all()
+    else:
+        tasks = db.query(Task).filter(Task.student_id == student_id).all()
+        reports = db.query(WeeklyReport).filter(WeeklyReport.student_id == student_id).all()
 
     now = datetime.now(timezone.utc)
 

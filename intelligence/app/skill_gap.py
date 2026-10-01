@@ -54,6 +54,41 @@ def generate_skill_recommendation(missing_skills: Optional[List[str]] = None) ->
     return f"Consider improving {skills_phrase} skills."
 
 
+_SKILL_ALIASES: Dict[str, str] = {
+    "py": "python",
+    "python3": "python",
+    "js": "javascript",
+    "es6": "javascript",
+    "ts": "typescript",
+    "reactjs": "react",
+    "react.js": "react",
+    "nodejs": "node.js",
+    "node": "node.js",
+    "nextjs": "next.js",
+    "vuejs": "vue.js",
+    "vue": "vue.js",
+    "ml": "machine learning",
+    "dl": "deep learning",
+    "tf": "tensorflow",
+    "k8s": "kubernetes",
+    "postgres": "postgresql",
+    "mongo": "mongodb",
+    "cpp": "c++",
+    "c plus plus": "c++",
+    "csharp": "c#",
+    "nlp": "natural language processing",
+    "rest api": "rest apis",
+    "restful api": "rest apis",
+    "aws cloud": "aws",
+}
+
+
+def normalize_skill_key(skill: str) -> str:
+    """Normalizes a skill string to a canonical lowercase comparison key."""
+    clean = " ".join(skill.strip().lower().split())
+    return _SKILL_ALIASES.get(clean, clean)
+
+
 def analyze_skill_gap(
     student_skills: Union[List[str], SkillGapRequest],
     required_skills: Optional[List[str]] = None,
@@ -62,7 +97,7 @@ def analyze_skill_gap(
     Compares a student's current skills against an internship's required skills.
 
     Requirements addressed:
-    1. Case-insensitive comparison (e.g. 'python', 'Python', 'PYTHON' match).
+    1. Case-insensitive comparison and common alias normalization.
     2. Deduplication of skills in comparison.
     3. Normalization of whitespace and capitalization.
     4. Safe handling of empty student skills (returns 0% match, all required missing).
@@ -85,11 +120,11 @@ def analyze_skill_gap(
         stud_list = student_skills if student_skills is not None else []
         req_list = required_skills if required_skills is not None else []
 
-    # 1. Normalize student skills: trim whitespace, convert to lower for O(1) case-insensitive check
+    # 1. Normalize student skills: trim whitespace, convert to canonical key for O(1) check
     normalized_student_skills = set()
     for skill in stud_list:
         if isinstance(skill, str):
-            clean_s = skill.strip().lower()
+            clean_s = normalize_skill_key(skill)
             if clean_s:
                 normalized_student_skills.add(clean_s)
 
@@ -99,7 +134,7 @@ def analyze_skill_gap(
     for skill in req_list:
         if isinstance(skill, str):
             clean_r = skill.strip()
-            norm_r = clean_r.lower()
+            norm_r = normalize_skill_key(clean_r)
             if norm_r and norm_r not in seen_req:
                 seen_req.add(norm_r)
                 unique_required.append(clean_r)
@@ -109,7 +144,7 @@ def analyze_skill_gap(
     missing_skills: List[str] = []
 
     for req in unique_required:
-        if req.lower() in normalized_student_skills:
+        if normalize_skill_key(req) in normalized_student_skills:
             matched_skills.append(req)
         else:
             missing_skills.append(req)

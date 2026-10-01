@@ -27,37 +27,50 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const payload: any = {
-        email,
+        email: email.trim(),
         password,
-        full_name: fullName,
+        full_name: fullName.trim(),
         role,
-        department,
       };
-      if (role === "STUDENT") {
-        payload.academic_year = academicYear;
-        payload.roll_number = rollNumber;
-      } else {
-        payload.designation = designation;
-        payload.employee_id = employeeId;
+      if (department.trim()) {
+        payload.department = department.trim();
       }
+      if (role === "STUDENT") {
+        payload.academic_year = Number(academicYear) || 1;
+        if (rollNumber.trim()) payload.roll_number = rollNumber.trim();
+      } else {
+        if (designation.trim()) payload.designation = designation.trim();
+        if (employeeId.trim()) payload.employee_id = employeeId.trim();
+      }
+      console.log("[DIAGNOSTIC Register Page] Submitting payload to api.register():", payload);
       const resp = await api.register(payload);
+      console.log("[DIAGNOSTIC Register Page] api.register() succeeded:", resp);
       setAuthToken(resp.access_token);
       localStorage.setItem("eduintern_user", JSON.stringify({
         user_id: resp.user_id,
         email: resp.email,
         full_name: resp.full_name,
         role: resp.role,
+        mentor_id: resp.mentor_id || resp.employee_id || null,
+        employee_id: resp.employee_id || resp.mentor_id || null,
       }));
       localStorage.setItem("simms_user", JSON.stringify({
         user_id: resp.user_id,
         email: resp.email,
         full_name: resp.full_name,
         role: resp.role,
+        mentor_id: resp.mentor_id || resp.employee_id || null,
+        employee_id: resp.employee_id || resp.mentor_id || null,
       }));
       if (resp.role === "STUDENT") window.location.href = "/student";
       else if (resp.role === "MENTOR") window.location.href = "/mentor";
       else window.location.href = "/";
     } catch (err: any) {
+      console.error("[DIAGNOSTIC Register Page] Caught error in handleSubmit:");
+      console.error("  err.name:", err?.name);
+      console.error("  err.message:", err?.message);
+      console.error("  err.stack:", err?.stack);
+      console.error("  raw error:", err);
       setError(err.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
@@ -155,8 +168,8 @@ export default function RegisterPage() {
                 <input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Associate Professor" className="sims-input" />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Employee ID</label>
-                <input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="EMP-CS-101" className="sims-input" />
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Mentor ID (Auto-generated)</label>
+                <input value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} placeholder="Auto: MNT-XXX" className="sims-input" />
               </div>
             </div>
           )}

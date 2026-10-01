@@ -14,6 +14,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { IntelligenceExplainerModal } from "@/components/IntelligenceExplainerModal";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { downloadRealPdf } from "@/lib/pdfExport";
 import {
   AlertCircle,
   AlertTriangle,
@@ -61,6 +62,15 @@ export default function FacultyStudentMonitoringPage() {
 
   // Student Detail State from Backend
   const [studentDetail, setStudentDetail] = useState<any | null>(null);
+  const [studentApplications, setStudentApplications] = useState<any[]>([]);
+
+  // Assign Internship Task State
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("HIGH");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+  const [submittingTask, setSubmittingTask] = useState(false);
+  const [taskSuccessMsg, setTaskSuccessMsg] = useState<string | null>(null);
 
   // Review Report Modal State
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
@@ -79,13 +89,30 @@ export default function FacultyStudentMonitoringPage() {
   // Active Tab for Evidence Timeline
   const [timelineFilter, setTimelineFilter] = useState<"ALL" | "REPORTS" | "TASKS" | "INTERVENTIONS">("ALL");
 
+  // Feature 2 & Feature 4 State for Mentor Review
+  const [studentHandoffs, setStudentHandoffs] = useState<any[]>([]);
+  const [handoffFeedbackDraft, setHandoffFeedbackDraft] = useState<Record<number, string>>({});
+  const [reviewingHandoffId, setReviewingHandoffId] = useState<number | null>(null);
+  const [handoffReviewMsg, setHandoffReviewMsg] = useState<string | null>(null);
+  const [studentCertificates, setStudentCertificates] = useState<any[]>([]);
+  const [confirmingCompletion, setConfirmingCompletion] = useState(false);
+  const [completionMsg, setCompletionMsg] = useState<string | null>(null);
+
   const loadStudentDetail = useCallback(async () => {
     if (!studentId) return;
     setRefreshing(true);
     setError(null);
     try {
-      const data = await api.getStudentDetail(studentId);
+      const [data, apps, hnds, certs] = await Promise.all([
+        api.getStudentDetail(studentId),
+        api.getStudentApplications(studentId).catch(() => []),
+        api.getStudentHandoffsForMentor(studentId).catch(() => []),
+        api.getStudentCertificatesForMentor(studentId).catch(() => []),
+      ]);
       setStudentDetail(data);
+      setStudentApplications(apps || []);
+      setStudentHandoffs(hnds || []);
+      setStudentCertificates(certs || []);
     } catch (e: any) {
       setError(e.message || "Failed to load student monitoring record");
     } finally {
@@ -105,6 +132,105 @@ export default function FacultyStudentMonitoringPage() {
       }
     }
   }, [user, authLoading, studentId, router, loadStudentDetail]);
+
+  const handleReviewStudentHandoff = async (handoffId: number, statusVal: "APPROVED" | "CHANGES_REQUESTED") => {
+    setReviewingHandoffId(handoffId);
+    setError(null);
+    setHandoffReviewMsg(null);
+    try {
+      const fb = handoffFeedbackDraft[handoffId]?.trim();
+      await api.reviewHandoff(handoffId, {
+        status: statusVal,
+        mentor_feedback:
+          fb ||
+          (statusVal === "APPROVED"
+            ? "Approved. Knowledge handoff documentation is comprehensive and ready for engineering transition."
+            : "Please expand the implementation notes and deployment steps before final sign-off."),
+      });
+      setHandoffReviewMsg(`Knowledge Handoff marked as ${statusVal}! Student has been notified.`);
+      await loadStudentDetail();
+    } catch (e: any) {
+      setError(e.message || "Failed to review Knowledge Handoff");
+    } finally {
+      setReviewingHandoffId(null);
+    }
+  };
+
+  const handleConfirmInternshipCompletion = async () => {
+    setConfirmingCompletion(true);
+    setError(null);
+    setCompletionMsg(null);
+    try {
+      const res = await api.confirmStudentCompletion(studentId, {
+        internship_id: studentDetail?.internship_id || undefined,
+      });
+      setCompletionMsg(
+        `Internship completion confirmed! Certificate ${res.certificate_id || ""} has been issued to ${studentDetail?.student_name}.`
+      );
+      await loadStudentDetail();
+    } catch (e: any) {
+      setError(
+        e.message ||
+          "Cannot confirm completion until all assigned internship tasks and required weekly reports are completed."
+      );
+    } finally {
+      setConfirmingCompletion(false);
+    }
+  };
+
+  const handleDownloadStudentCertificatePdf = async (certificateId: string) => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("sims_token") : null;
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+      const res = await fetch(`${baseUrl}/certificates/${encodeURIComponent(certificateId)}/download`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to download certificate PDF");
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Certificate_${certificateId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e.message || "Failed to download certificate PDF");
+    }
+  };
+
+  const handleAssignTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTaskTitle.trim()) return;
+    setSubmittingTask(true);
+    setError(null);
+    setTaskSuccessMsg(null);
+    try {
+      const primaryApp = studentApplications[0];
+      await api.assignStudentTask(studentId, {
+        title: newTaskTitle.trim(),
+        description: newTaskDescription.trim() || undefined,
+        priority: newTaskPriority,
+        due_date: newTaskDueDate ? new Date(newTaskDueDate).toISOString() : undefined,
+        internship_id: primaryApp?.internship_id || undefined,
+        application_id: primaryApp?.id || undefined,
+      });
+      setTaskSuccessMsg("Internship-specific task assigned to student and notification dispatched!");
+      setNewTaskTitle("");
+      setNewTaskDescription("");
+      setNewTaskDueDate("");
+      await loadStudentDetail();
+      setTimeout(() => setTaskSuccessMsg(null), 3500);
+    } catch (e: any) {
+      setError(e.message || "Failed to assign task to student");
+    } finally {
+      setSubmittingTask(false);
+    }
+  };
 
   const handleOpenReviewModal = (report: any) => {
     setSelectedReport(report);
@@ -363,8 +489,65 @@ export default function FacultyStudentMonitoringPage() {
             <span>Contact Student</span>
           </a>
           <button
-            onClick={() => window.print()}
+            onClick={() =>
+              downloadRealPdf({
+                filename: "Student_Progress_Report.pdf",
+                title: `EduIntern - Student Progress Report: ${studentDetail.student_name}`,
+                subtitle: `Enrollment: ${studentDetail.roll_number} | Department: ${studentDetail.department}`,
+                metadata: {
+                  "Student Name": studentDetail.student_name,
+                  "Email": studentDetail.student_email,
+                  "Company": studentDetail.company_name || "Unplaced",
+                  "Role": studentDetail.internship_title || "N/A",
+                  "Faculty Mentor": studentDetail.mentor_name || "Faculty Supervisor",
+                  "Task Completion": `${completedTasks}/${totalTasks} (${taskProgressPct}%)`,
+                  "Reports Submitted": `${submittedReports}/${expectedReports} (${reportCompletionPct}%)`,
+                  "Verified Hours": `${totalHoursLogged} hrs`,
+                },
+                sections: [
+                  {
+                    heading: "1. Weekly Progress Reports & Faculty Evaluations",
+                    lines:
+                      (studentDetail.reports || []).length > 0
+                        ? (studentDetail.reports || []).map(
+                            (r: any) =>
+                              `Week ${r.week_number} [${r.status}] (${r.hours_spent} hrs) | Score: ${
+                                r.mentor_score ?? "Pending"
+                              } | Summary: ${r.achievements || r.summary || ""} ${
+                                r.mentor_feedback ? `| Feedback: ${r.mentor_feedback}` : ""
+                              }`
+                          )
+                        : ["No weekly reports submitted yet."],
+                  },
+                  {
+                    heading: "2. Milestone Tasks",
+                    lines:
+                      (studentDetail.tasks || []).length > 0
+                        ? (studentDetail.tasks || []).map(
+                            (t: any) =>
+                              `[${t.is_completed ? "COMPLETED" : "PENDING"}] ${t.title} - ${
+                                t.description || ""
+                              }`
+                          )
+                        : ["No milestone tasks assigned."],
+                  },
+                  {
+                    heading: "3. Faculty Intervention Audit Log",
+                    lines:
+                      (studentDetail.interventions || []).length > 0
+                        ? (studentDetail.interventions || []).map(
+                            (i: any) =>
+                              `${i.intervention_type}: ${i.notes} (Recorded by ${
+                                i.mentor_name || "Faculty Supervisor"
+                              })`
+                          )
+                        : ["No faculty interventions recorded."],
+                  },
+                ],
+              })
+            }
             className="stitch-pill-btn py-1.5 px-3 text-xs bg-white font-bold"
+            title="Download Student Progress Report PDF"
           >
             <Download size={13} />
             <span>Export Record</span>
@@ -516,172 +699,6 @@ export default function FacultyStudentMonitoringPage() {
             <ProgressBar value={taskProgressPct} tone={taskProgressPct >= 75 ? "emerald" : taskProgressPct >= 50 ? "amber" : "red"} />
           </div>
         </div>
-
-        {/* ══════════════════════════════════════════════════════════ */}
-        {/* SECTION 3: PROGRESS ANALYSIS & MONITORING STATUS           */}
-        {/* ══════════════════════════════════════════════════════════ */}
-        <GlassCard className="p-5 sm:p-6 border-slate-200/80">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-200/80">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200/70">
-                  Deterministic Engine
-                </span>
-                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                  Progress Analysis
-                </h3>
-              </div>
-              <p className="text-xs text-slate-500">
-                4-Factor weighted evaluation $(0.30 \cdot C + 0.30 \cdot T + 0.20 \cdot R + 0.20 \cdot M)$ computed from verified database records.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-              <button
-                onClick={() => setShowExplainer(true)}
-                className="stitch-pill-btn py-1 px-2.5 text-[11px] font-bold text-slate-600 hover:text-blue-700 bg-white"
-                title="View deterministic scoring formula &amp; logic"
-              >
-                <Info size={12} className="text-blue-600" />
-                <span>How it works</span>
-              </button>
-              <StatusBadge status={studentDetail.attention_status} size="lg" />
-              <div className="text-right pl-2 border-l border-slate-200">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Score</span>
-                <span className="text-lg font-black text-slate-900">
-                  {studentDetail.attention_score}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 4-Factor Breakdown Badges */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 my-4">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                Consistency (30%)
-              </span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <strong className="text-base font-black text-slate-900">
-                  {studentDetail.factors?.progress_consistency ?? 0}%
-                </strong>
-              </div>
-              <div className="mt-1.5">
-                <ProgressBar value={studentDetail.factors?.progress_consistency ?? 0} size="sm" tone={(studentDetail.factors?.progress_consistency ?? 0) >= 75 ? "blue" : "amber"} />
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                Task Completion (30%)
-              </span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <strong className="text-base font-black text-slate-900">
-                  {studentDetail.factors?.task_completion ?? 0}%
-                </strong>
-              </div>
-              <div className="mt-1.5">
-                <ProgressBar value={studentDetail.factors?.task_completion ?? 0} size="sm" tone={(studentDetail.factors?.task_completion ?? 0) >= 75 ? "emerald" : "amber"} />
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                Reports (20%)
-              </span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <strong className="text-base font-black text-slate-900">
-                  {studentDetail.factors?.report_submission ?? 0}%
-                </strong>
-              </div>
-              <div className="mt-1.5">
-                <ProgressBar value={studentDetail.factors?.report_submission ?? 0} size="sm" tone={(studentDetail.factors?.report_submission ?? 0) >= 75 ? "purple" : "amber"} />
-              </div>
-            </div>
-
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/70">
-              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
-                Mentor Feedback (20%)
-              </span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <strong className="text-base font-black text-slate-900">
-                  {studentDetail.factors?.mentor_feedback ?? 0}%
-                </strong>
-              </div>
-              <div className="mt-1.5">
-                <ProgressBar value={studentDetail.factors?.mentor_feedback ?? 0} size="sm" tone={(studentDetail.factors?.mentor_feedback ?? 0) >= 75 ? "emerald" : "amber"} />
-              </div>
-            </div>
-          </div>
-
-          {/* Contributing Attention Indicators & Recommended Review Action */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-            {/* Attention Indicators (Contributing factors) */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
-                <ShieldAlert size={14} className="text-amber-600" />
-                <span>Contributing Attention Indicators</span>
-              </h4>
-              {studentDetail.reasons && studentDetail.reasons.length > 0 ? (
-                <div className="space-y-2">
-                  {studentDetail.reasons.map((r: string, idx: number) => {
-                    const isWarning =
-                      r.toLowerCase().includes("below") ||
-                      r.toLowerCase().includes("overdue") ||
-                      r.toLowerCase().includes("behind") ||
-                      r.toLowerCase().includes("pending") ||
-                      r.toLowerCase().includes("inconsistent") ||
-                      r.toLowerCase().includes("incomplete");
-                    return (
-                      <div
-                        key={idx}
-                        className={`p-2.5 rounded-lg text-xs font-semibold flex items-start gap-2 border ${
-                          isWarning
-                            ? "bg-rose-50/80 border-rose-200 text-rose-800"
-                            : "bg-emerald-50/80 border-emerald-200 text-emerald-800"
-                        }`}
-                      >
-                        <span className="shrink-0">{isWarning ? "⚠️" : "✓"}</span>
-                        <span>{r}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 italic">No diagnostic anomalies identified.</p>
-              )}
-            </div>
-
-            {/* Recommended Review Action */}
-            <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-200/70">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-blue-900 mb-2 flex items-center gap-1.5">
-                <Target size={14} className="text-blue-700" />
-                <span>Recommended Review Action</span>
-              </h4>
-              <div className="space-y-2">
-                {studentDetail.attention_status === "NEEDS_ATTENTION" && (
-                  <div className="p-2.5 rounded-lg text-xs font-bold bg-rose-50 border border-rose-200 text-rose-900 flex items-start gap-2 shadow-2xs">
-                    <span className="shrink-0 text-rose-600">⚠️</span>
-                    <span>Faculty review recommended: 1-on-1 academic check-in with intern.</span>
-                  </div>
-                )}
-                {studentDetail.recommendations && studentDetail.recommendations.length > 0 ? (
-                  studentDetail.recommendations.map((rec: string, idx: number) => (
-                    <div
-                      key={idx}
-                      className="p-2.5 rounded-lg text-xs font-semibold bg-white border border-blue-200 text-blue-900 flex items-start gap-2 shadow-2xs"
-                    >
-                      <span className="shrink-0 text-blue-600">💡</span>
-                      <span>{rec}</span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-slate-500 italic">Continue routine weekly logbook monitoring.</p>
-                )}
-              </div>
-            </div>
-          </div>
-        </GlassCard>
 
         {/* ══════════════════════════════════════════════════════════ */}
         {/* SECTION 5: SKILL GAP ANALYSIS                              */}
@@ -851,29 +868,45 @@ export default function FacultyStudentMonitoringPage() {
 
                           {/* Extra Report Meta Details if present */}
                           {isReport && ev.meta && (
-                            <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                              {ev.meta.mentor_score !== null && ev.meta.mentor_score !== undefined ? (
-                                <div className="text-xs font-semibold text-slate-700">
-                                  Grade: <strong className="text-emerald-700">{ev.meta.mentor_score} / 100</strong>
-                                  {ev.meta.mentor_feedback && (
-                                    <span className="text-slate-500 ml-2 italic truncate max-w-xs inline-block align-bottom">
-                                      &ldquo;{ev.meta.mentor_feedback}&rdquo;
-                                    </span>
-                                  )}
+                            <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-2">
+                              {ev.meta.evidence_url && (
+                                <div className="text-xs flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-600">Verification Evidence:</span>
+                                  <a
+                                    href={ev.meta.evidence_url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-blue-600 hover:underline font-semibold inline-flex items-center gap-1"
+                                  >
+                                    <span>{ev.meta.evidence_url}</span>
+                                    <ExternalLink size={11} />
+                                  </a>
                                 </div>
-                              ) : (
-                                <span className="text-xs font-semibold text-amber-700">
-                                  Awaiting Faculty Evaluation
-                                </span>
                               )}
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                {ev.meta.mentor_score !== null && ev.meta.mentor_score !== undefined ? (
+                                  <div className="text-xs font-semibold text-slate-700">
+                                    Grade: <strong className="text-emerald-700">{ev.meta.mentor_score} / 100</strong>
+                                    {ev.meta.mentor_feedback && (
+                                      <span className="text-slate-500 ml-2 italic truncate max-w-xs inline-block align-bottom">
+                                        &ldquo;{ev.meta.mentor_feedback}&rdquo;
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs font-semibold text-amber-700">
+                                    Awaiting Faculty Evaluation
+                                  </span>
+                                )}
 
-                              <button
-                                onClick={() => handleOpenReviewModal(ev.meta)}
-                                className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1 ml-auto"
-                              >
-                                <Star size={12} />
-                                <span>{ev.meta.mentor_score !== null ? "Re-evaluate" : "Grade Submission"}</span>
-                              </button>
+                                <button
+                                  onClick={() => handleOpenReviewModal(ev.meta)}
+                                  className="px-3 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1 ml-auto"
+                                >
+                                  <Star size={12} />
+                                  <span>{ev.meta.mentor_score !== null ? "Re-evaluate" : "Grade Submission"}</span>
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
@@ -883,10 +916,269 @@ export default function FacultyStudentMonitoringPage() {
                 </div>
               )}
             </GlassCard>
+
+            {/* FEATURE 2: KNOWLEDGE HANDOFF REVIEW SECTION */}
+            <GlassCard className="p-5 sm:p-6 border-indigo-200/80">
+              <SectionHeader
+                title="Student Knowledge Handoff Review"
+                subtitle="Inspect and approve or request changes on the student's engineering knowledge transfer document."
+                badge={`${studentHandoffs.length} Handoff(s)`}
+                className="mb-4"
+              />
+
+              {handoffReviewMsg && (
+                <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
+                  ✓ {handoffReviewMsg}
+                </div>
+              )}
+
+              {studentHandoffs.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                  The student has not submitted a Knowledge Handoff document yet.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {studentHandoffs.map((h: any) => (
+                    <div key={h.id} className="p-4 rounded-xl border border-slate-200/80 bg-white space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <strong className="text-sm font-extrabold text-slate-900">{h.title}</strong>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                h.status === "APPROVED"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : h.status === "CHANGES_REQUESTED"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-blue-50 text-blue-700 border-blue-200"
+                              }`}
+                            >
+                              {h.status}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {h.internship_title} • {h.company_name} ({h.domain || "Software Development"})
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/60">
+                          <strong className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                            Overview
+                          </strong>
+                          <p className="text-slate-700 whitespace-pre-line">{h.overview}</p>
+                        </div>
+                        <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/60">
+                          <strong className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                            Completed Work
+                          </strong>
+                          <p className="text-slate-700 whitespace-pre-line">{h.completed_work}</p>
+                        </div>
+                      </div>
+
+                      {h.recommendations && (
+                        <p className="text-xs text-slate-600">
+                          <strong>Recommendations for Next Intern:</strong> {h.recommendations}
+                        </p>
+                      )}
+
+                      <div className="pt-2 border-t border-slate-100 space-y-2">
+                        <input
+                          type="text"
+                          value={handoffFeedbackDraft[h.id] ?? h.mentor_feedback ?? ""}
+                          onChange={(e) =>
+                            setHandoffFeedbackDraft((prev) => ({ ...prev, [h.id]: e.target.value }))
+                          }
+                          placeholder="Add mentor review feedback for Knowledge Handoff..."
+                          className="sims-input text-xs w-full"
+                        />
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={reviewingHandoffId === h.id}
+                            onClick={() => handleReviewStudentHandoff(h.id, "APPROVED")}
+                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg transition-colors"
+                          >
+                            ✓ Approve Handoff
+                          </button>
+                          <button
+                            type="button"
+                            disabled={reviewingHandoffId === h.id}
+                            onClick={() => handleReviewStudentHandoff(h.id, "CHANGES_REQUESTED")}
+                            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-lg transition-colors"
+                          >
+                            Request Changes
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </GlassCard>
+
+            {/* FEATURE 4: INTERNSHIP COMPLETION & CERTIFICATE ISSUANCE */}
+            <GlassCard className="p-5 sm:p-6 border-emerald-200/80">
+              <SectionHeader
+                title="Internship Completion Verification &amp; Certificate Issuance"
+                subtitle="Confirm final internship completion once all tasks and weekly reports are verified to issue the student's official certificate."
+                badge={
+                  studentCertificates.length > 0
+                    ? `Certificate Issued (${studentCertificates[0].certificate_id})`
+                    : studentDetail.completion_status === "COMPLETED"
+                    ? "Completed"
+                    : "In Progress"
+                }
+                className="mb-4"
+              />
+
+              {completionMsg && (
+                <div className="mb-4 p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
+                  ✓ {completionMsg}
+                </div>
+              )}
+
+              {studentCertificates.length > 0 ? (
+                <div className="space-y-3">
+                  {studentCertificates.map((cert: any) => (
+                    <div
+                      key={cert.certificate_id}
+                      className="p-4 rounded-xl bg-emerald-50/70 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <strong className="text-sm font-black text-slate-900 block">
+                          {cert.certificate_id} — {cert.student_name}
+                        </strong>
+                        <span className="text-slate-600">
+                          {cert.internship_title} at {cert.company_name} ({cert.domain}) • {cert.duration_weeks} Weeks
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadStudentCertificatePdf(cert.certificate_id)}
+                        className="btn-primary text-xs inline-flex items-center gap-1.5 shrink-0 self-start sm:self-auto"
+                      >
+                        <Download size={13} />
+                        <span>Download Certificate PDF</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+                  <div>
+                    <strong className="text-slate-900 block mb-0.5">
+                      Tasks Completed: {completedTasks}/{totalTasks} • Reports Submitted: {submittedReports}
+                    </strong>
+                    <span className="text-slate-600">
+                      {completedTasks >= Math.max(1, totalTasks) && submittedReports >= 1
+                        ? "All tasks and weekly reports are verified. Ready for final completion sign-off."
+                        : "Student must complete all assigned tasks and submit required weekly reports before completion sign-off."}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={confirmingCompletion}
+                    onClick={handleConfirmInternshipCompletion}
+                    className="btn-primary text-xs shrink-0 self-start sm:self-auto"
+                  >
+                    {confirmingCompletion
+                      ? "Confirming..."
+                      : "Confirm Internship Completion & Issue Certificate"}
+                  </button>
+                </div>
+              )}
+            </GlassCard>
           </div>
 
-          {/* Right 1 Col: SECTION 7 - Persistent Intervention Record Form & History */}
+          {/* Right 1 Col: SECTION 7 - Assign Internship Task & Intervention Record Form */}
           <div className="space-y-6">
+            {/* Assign Internship-Specific Task Form */}
+            <GlassCard className="p-5 sm:p-6 border-blue-200/80">
+              <div className="flex items-center gap-2 mb-1">
+                <Target size={16} className="text-blue-600" />
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                  Assign Internship Task
+                </h3>
+              </div>
+              <p className="text-xs text-slate-500 mb-4">
+                Assign a milestone deliverable specific to {studentDetail.internship_title} ({studentDetail.company_name}).
+              </p>
+
+              <form onSubmit={handleAssignTask} className="space-y-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                    Task Title <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    required
+                    placeholder={`e.g. Implement ${skillGap.missing_skills?.[0] || "Core Module"} Deliverable`}
+                    className="sims-input text-xs w-full"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                    Task Description &amp; Acceptance Criteria
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={newTaskDescription}
+                    onChange={(e) => setNewTaskDescription(e.target.value)}
+                    placeholder="Specify technical deliverables, required skills, and verification steps..."
+                    className="sims-textarea text-xs w-full"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                      Priority
+                    </label>
+                    <select
+                      value={newTaskPriority}
+                      onChange={(e) => setNewTaskPriority(e.target.value)}
+                      className="sims-input text-xs w-full bg-white"
+                    >
+                      <option value="HIGH">HIGH</option>
+                      <option value="MEDIUM">MEDIUM</option>
+                      <option value="LOW">LOW</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                      Due Date
+                    </label>
+                    <input
+                      type="date"
+                      value={newTaskDueDate}
+                      onChange={(e) => setNewTaskDueDate(e.target.value)}
+                      className="sims-input text-xs w-full"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submittingTask || !newTaskTitle.trim()}
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} />
+                  <span>{submittingTask ? "Assigning Task..." : "Assign Task to Student"}</span>
+                </button>
+
+                {taskSuccessMsg && (
+                  <div className="p-3 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    ✓ {taskSuccessMsg}
+                  </div>
+                )}
+              </form>
+            </GlassCard>
+
             <GlassCard className="p-5 sm:p-6 border-slate-200/80">
               <div className="flex items-center gap-2 mb-1">
                 <ShieldCheck size={16} className="text-blue-600" />
@@ -1042,6 +1334,19 @@ export default function FacultyStudentMonitoringPage() {
               <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">
                 {selectedReport.achievements}
               </p>
+              {selectedReport.evidence_url && (
+                <div className="mt-2 pt-2 border-t border-slate-200/70 text-xs">
+                  <strong className="text-slate-700">Verification Evidence: </strong>
+                  <a
+                    href={selectedReport.evidence_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 hover:underline font-semibold"
+                  >
+                    {selectedReport.evidence_url}
+                  </a>
+                </div>
+              )}
               {selectedReport.challenges && (
                 <div className="mt-2 pt-2 border-t border-slate-200/70 text-xs text-amber-800">
                   <strong>Challenges Encountered:</strong> {selectedReport.challenges}

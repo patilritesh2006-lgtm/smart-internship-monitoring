@@ -23,6 +23,7 @@ from backend.app.routers import (
     admin_router,
     analytics_router,
     auth_router,
+    communications_router,
     internships_router,
     mentors_router,
     students_router,
@@ -110,7 +111,11 @@ async def rate_limit_auth_endpoints(request: Request, call_next):
     Sliding-window rate limiter for authentication endpoints.
     Blocks clients after 10 failed auth attempts (brute-force defense)
     or 100 total requests (flooding defense) within a 60-second window.
+    OPTIONS preflight requests are excluded from rate limiting.
     """
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     path = request.url.path
     if path in RATE_LIMIT_PATHS:
         client_ip = _get_client_ip(request)
@@ -131,6 +136,11 @@ async def rate_limit_auth_endpoints(request: Request, call_next):
                     "Brute force lockout for IP %s on %s (%d failed attempts in %ds)",
                     client_ip, path, len(_failed_auth_store[client_ip]), RATE_LIMIT_WINDOW_SECONDS
                 )
+                headers = {"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)}
+                origin = request.headers.get("origin")
+                if origin:
+                    headers["Access-Control-Allow-Origin"] = origin
+                    headers["Access-Control-Allow-Credentials"] = "true"
                 return JSONResponse(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     content={
@@ -139,7 +149,7 @@ async def rate_limit_auth_endpoints(request: Request, call_next):
                             f"attempts per {RATE_LIMIT_WINDOW_SECONDS} seconds are allowed."
                         )
                     },
-                    headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
+                    headers=headers,
                 )
 
             if len(_req_rate_store[client_ip]) >= MAX_TOTAL_AUTH_REQ:
@@ -147,6 +157,11 @@ async def rate_limit_auth_endpoints(request: Request, call_next):
                     "Rate limit exceeded for IP %s on %s (%d requests in %ds)",
                     client_ip, path, len(_req_rate_store[client_ip]), RATE_LIMIT_WINDOW_SECONDS
                 )
+                headers = {"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)}
+                origin = request.headers.get("origin")
+                if origin:
+                    headers["Access-Control-Allow-Origin"] = origin
+                    headers["Access-Control-Allow-Credentials"] = "true"
                 return JSONResponse(
                     status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                     content={
@@ -155,7 +170,7 @@ async def rate_limit_auth_endpoints(request: Request, call_next):
                             f"per {RATE_LIMIT_WINDOW_SECONDS} seconds are allowed."
                         )
                     },
-                    headers={"Retry-After": str(RATE_LIMIT_WINDOW_SECONDS)},
+                    headers=headers,
                 )
 
             _req_rate_store[client_ip].append(now)
@@ -185,7 +200,7 @@ if "*" in cors_origins or settings.CORS_ORIGINS == "*":
         allow_origins=["*"],
         allow_credentials=False,  # Security fix: cannot combine * with credentials=True
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        allow_headers=["Authorization", "Content-Type", "Accept"],
+        allow_headers=["*"],
     )
 else:
     app.add_middleware(
@@ -194,7 +209,7 @@ else:
         allow_origin_regex=r"^https://.*\.vercel\.app$|^https://.*\.onrender\.com$|^http://localhost(:\d+)?$|^http://127\.0\.0\.1(:\d+)?$",
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-        allow_headers=["Authorization", "Content-Type", "Accept"],
+        allow_headers=["*"],
     )
 
 
@@ -205,9 +220,15 @@ async def global_exception_handler(request: Request, exc: Exception):
     prevents exposing raw SQL statements, filesystem paths, or internal tracebacks to clients.
     """
     logger.error(f"Unhandled exception on {request.method} {request.url}: {exc}", exc_info=True)
+    headers = {}
+    origin = request.headers.get("origin")
+    if origin:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "An unexpected internal server error occurred. Please try again later."},
+        headers=headers,
     )
 
 
@@ -218,6 +239,7 @@ app.include_router(students_router, prefix=settings.API_V1_STR)
 app.include_router(mentors_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(analytics_router, prefix=settings.API_V1_STR)
+app.include_router(communications_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health")

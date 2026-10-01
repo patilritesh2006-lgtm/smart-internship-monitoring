@@ -14,6 +14,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { IntelligenceExplainerModal } from "@/components/IntelligenceExplainerModal";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { downloadRealPdf } from "@/lib/pdfExport";
 import {
   AlertCircle,
   AlertTriangle,
@@ -58,8 +59,17 @@ export default function MentorPortal() {
   const [error, setError] = useState<string | null>(null);
 
   // Live backend data
+  const [mentorProfile, setMentorProfile] = useState<any | null>(null);
   const [interns, setInterns] = useState<any[]>([]);
   const [pendingReports, setPendingReports] = useState<any[]>([]);
+  const [partnerInternships, setPartnerInternships] = useState<any[]>([]);
+  const [mentorNotifications, setMentorNotifications] = useState<any[]>([]);
+
+  // Student <-> Mentor Messaging State
+  const [chatStudentId, setChatStudentId] = useState<number | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [messageDraft, setMessageDraft] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   // Filter & Search
   const [statusFilter, setStatusFilter] = useState("ALL");
@@ -77,6 +87,7 @@ export default function MentorPortal() {
   const [interventionType, setInterventionType] = useState("1-on-1 Academic Check-in");
   const [interventionNotes, setInterventionNotes] = useState("");
   const [interventionSuccessMsg, setInterventionSuccessMsg] = useState<string | null>(null);
+  const [submittingIntervention, setSubmittingIntervention] = useState(false);
   const [interventionLogs, setInterventionLogs] = useState<Record<number, any[]>>({});
 
   // Banner dismissed state
@@ -94,17 +105,77 @@ export default function MentorPortal() {
     setRefreshing(true);
     setError(null);
     try {
-      const [internsData, reportsData] = await Promise.all([
+      const [profileRes, internsRes, reportsRes, allInternshipsRes, notifsRes, msgsRes] = await Promise.allSettled([
+        api.getMyMentorProfile(),
         api.getAssignedInterns(),
         api.getPendingReports(),
+        api.listInternships(),
+        api.getNotifications(),
+        api.getMessages(),
       ]);
-      setInterns(internsData || []);
-      setPendingReports(reportsData || []);
+      if (profileRes.status === "fulfilled") {
+        setMentorProfile(profileRes.value || null);
+      }
+      if (internsRes.status === "fulfilled") {
+        const assignedList = internsRes.value || [];
+        setInterns(assignedList);
+        if (assignedList.length > 0 && !chatStudentId) {
+          setChatStudentId(assignedList[0].student_id);
+        }
+      }
+      if (reportsRes.status === "fulfilled") setPendingReports(reportsRes.value || []);
+      if (allInternshipsRes.status === "fulfilled") setPartnerInternships(allInternshipsRes.value || []);
+      if (notifsRes.status === "fulfilled") setMentorNotifications(notifsRes.value || []);
+      if (msgsRes.status === "fulfilled") setMessages(msgsRes.value || []);
+
+      if (internsRes.status === "rejected" && reportsRes.status === "rejected") {
+        setError(internsRes.reason?.message || "Failed to load faculty supervision data");
+      }
     } catch (e: any) {
       setError(e.message || "Failed to load faculty supervision data");
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleSendMentorMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatStudentId || !messageDraft.trim()) return;
+    setSendingMessage(true);
+    setError(null);
+    try {
+      const created = await api.sendMessage({
+        content: messageDraft.trim(),
+        student_id: chatStudentId,
+      });
+      setMessages((prev) => [...prev, created]);
+      setMessageDraft("");
+    } catch (e: any) {
+      setError(e.message || "Failed to send message to student");
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
+  const loadStudentInterventions = async (studentId: number) => {
+    try {
+      const data = await api.getInterventions(studentId);
+      setInterventionLogs((prev) => ({
+        ...prev,
+        [studentId]: data || [],
+      }));
+    } catch {
+      // Non-blocking background fetch
+    }
+  };
+
+  const handleOpenInternModal = (intern: any) => {
+    setSelectedIntern(intern);
+    setInterventionNotes("");
+    setInterventionSuccessMsg(null);
+    if (intern?.student_id) {
+      loadStudentInterventions(intern.student_id);
     }
   };
 
@@ -151,32 +222,26 @@ export default function MentorPortal() {
     }
   };
 
-  const handleRecordIntervention = () => {
-    if (!selectedIntern || !interventionNotes.trim()) return;
-    const newLog = {
-      id: Date.now(),
-      type: interventionType,
-      notes: interventionNotes.trim(),
-      timestamp: new Date().toLocaleString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "numeric",
-      }),
-      faculty: user?.full_name || "Faculty Supervisor",
-    };
-
-    setInterventionLogs((prev) => ({
-      ...prev,
-      [selectedIntern.student_id]: [newLog, ...(prev[selectedIntern.student_id] || [])],
-    }));
-
-    setInterventionSuccessMsg("Faculty intervention recorded to student compliance log!");
-    setInterventionNotes("");
-    setTimeout(() => {
-      setInterventionSuccessMsg(null);
-    }, 2500);
+  const handleRecordIntervention = async () => {
+    if (!selectedIntern || !interventionNotes.trim() || submittingIntervention) return;
+    setSubmittingIntervention(true);
+    setError(null);
+    try {
+      await api.recordIntervention(selectedIntern.student_id, {
+        intervention_type: interventionType,
+        notes: interventionNotes.trim(),
+      });
+      setInterventionSuccessMsg("Faculty intervention recorded to student compliance log!");
+      setInterventionNotes("");
+      await loadStudentInterventions(selectedIntern.student_id);
+      setTimeout(() => {
+        setInterventionSuccessMsg(null);
+      }, 2500);
+    } catch (e: any) {
+      setError(e.message || "Failed to record intervention");
+    } finally {
+      setSubmittingIntervention(false);
+    }
   };
 
   /* ── Computed Metrics from Live Data ── */
@@ -257,11 +322,16 @@ export default function MentorPortal() {
               <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
                 Faculty can monitor internship progress, identify students requiring attention, inspect evidence, and record interventions.
               </p>
-              <div className="flex items-center gap-2 mt-2 text-xs text-slate-600 font-medium">
+              <div className="flex items-center gap-2 mt-2 text-xs text-slate-600 font-medium flex-wrap">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 <span>
-                  Supervisor: <strong className="text-slate-900">{user?.full_name || "Dr. Alan Turing"}</strong> ({user?.email || "mentor@demo.com"})
+                  Supervisor: <strong className="text-slate-900">{mentorProfile?.full_name || user?.full_name || "Dr. Alan Turing"}</strong> ({mentorProfile?.email || user?.email || "mentor@demo.com"})
                 </span>
+                {(mentorProfile?.mentor_id || mentorProfile?.employee_id || (user as any)?.mentor_id) && (
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200/70 font-mono text-[11px] font-extrabold">
+                    Mentor ID: {mentorProfile?.mentor_id || mentorProfile?.employee_id || (user as any)?.mentor_id}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -276,8 +346,52 @@ export default function MentorPortal() {
                 <span>{refreshing ? "Updating..." : "Refresh"}</span>
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={() =>
+                  downloadRealPdf({
+                    filename: "Mentor_Weekly_Report.pdf",
+                    title: "EduIntern - Faculty Mentor Weekly Supervision Report",
+                    subtitle: `Faculty Supervisor: ${user?.full_name || "Faculty Mentor"} (${user?.email || ""})`,
+                    metadata: {
+                      "Assigned Interns": totalAssigned,
+                      "Students On Track": onTrackCount,
+                      "Requiring Monitoring": monitorCount,
+                      "Needing Attention": attentionCount,
+                      "Pending Report Reviews": pendingCount,
+                    },
+                    sections: [
+                      {
+                        heading: "1. Supervised Student Cohort",
+                        lines:
+                          interns.length > 0
+                            ? interns.map(
+                                (i: any) =>
+                                  `${i.student_name} (${i.enrollment_number || "Enrolled"}) | Company: ${
+                                    i.company_name || "Unplaced"
+                                  } | Role: ${i.internship_title || "N/A"} | Tasks: ${
+                                    i.tasks_completed ?? 0
+                                  }/${i.tasks_total ?? 0} | Reports: ${
+                                    i.reports_submitted ?? 0
+                                  }/${i.reports_expected ?? 0}`
+                              )
+                            : ["No assigned students in cohort."],
+                      },
+                      {
+                        heading: "2. Weekly Reports Awaiting Faculty Review",
+                        lines:
+                          pendingReports.length > 0
+                            ? pendingReports.map(
+                                (r: any) =>
+                                  `Week ${r.week_number} - ${r.student_name} (${r.hours_spent} hrs): ${
+                                    r.achievements || r.summary || ""
+                                  }`
+                              )
+                            : ["All submitted weekly reports have been reviewed and graded."],
+                      },
+                    ],
+                  })
+                }
                 className="stitch-pill-btn py-2 px-3 text-xs font-bold bg-white"
+                title="Download Mentor Weekly Supervision Report PDF"
               >
                 <Download size={13} />
                 <span>Export PDF</span>
@@ -285,7 +399,7 @@ export default function MentorPortal() {
               <button
                 onClick={() => {
                   if (topPriorityStudent) {
-                    setSelectedIntern(topPriorityStudent);
+                    handleOpenInternModal(topPriorityStudent);
                   }
                 }}
                 className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5"
@@ -445,9 +559,8 @@ export default function MentorPortal() {
             </div>
           )}
 
-          {/* 4. SUBMISSIONS AWAITING REVIEW & MONITORING INSIGHTS */}
+          {/* 4. SUBMISSIONS AWAITING REVIEW & PROGRESS ANALYSIS FACTORS */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Review Queue (8 cols) */}
             <GlassCard className="lg:col-span-8 p-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                 <div>
@@ -686,7 +799,12 @@ export default function MentorPortal() {
                             <span className="text-slate-800 font-medium block leading-tight">
                               {stu.company_name}
                             </span>
-                            <span className="text-[10px] text-slate-400">{stu.internship_title}</span>
+                            <span className="text-[10px] text-slate-400 block">
+                              {stu.internship_title}
+                            </span>
+                            <span className="text-[9px] font-bold uppercase text-blue-600">
+                              App: {stu.application_status || "APPROVED"}
+                            </span>
                           </td>
 
                           <td className="py-3 px-3">
@@ -694,7 +812,7 @@ export default function MentorPortal() {
                               <div className="flex items-center justify-between text-[10px] font-bold text-slate-600 mb-1">
                                 <span>{progressVal}%</span>
                                 <span className="text-slate-400 text-[9px]">
-                                  {stu.tasks_completed}/{stu.tasks_total}
+                                  {stu.tasks_completed}/{stu.tasks_total} ({stu.pending_tasks_count ?? Math.max(0, stu.tasks_total - stu.tasks_completed)} pending)
                                 </span>
                               </div>
                               <ProgressBar
@@ -738,7 +856,18 @@ export default function MentorPortal() {
                                 <span>Inspect</span>
                               </Link>
                               <button
-                                onClick={() => setSelectedIntern(stu)}
+                                onClick={() => {
+                                  setChatStudentId(stu.student_id);
+                                  setActiveTab("messages");
+                                }}
+                                className="px-2 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1"
+                                title="Message assigned student"
+                              >
+                                <MessageSquare size={12} />
+                                <span>Message</span>
+                              </button>
+                              <button
+                                onClick={() => handleOpenInternModal(stu)}
                                 className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
                                 title="Quick intervention modal"
                               >
@@ -819,7 +948,7 @@ export default function MentorPortal() {
                           <span>Full Monitoring Detail</span>
                         </Link>
                         <button
-                          onClick={() => setSelectedIntern(stu)}
+                          onClick={() => handleOpenInternModal(stu)}
                           className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors"
                         >
                           Quick Log
@@ -889,6 +1018,241 @@ export default function MentorPortal() {
             </div>
           )}
         </GlassCard>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* 2B. STUDENT ↔ MENTOR COMMUNICATION TAB                     */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      {activeTab === "messages" && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Assigned Students Thread Selector */}
+          <GlassCard className="p-5">
+            <SectionHeader
+              title="Assigned Students"
+              subtitle="Select an assigned student to message"
+              icon={<Users size={16} className="text-blue-600" />}
+            />
+            <div className="space-y-2 mt-4">
+              {interns.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                  No students assigned yet.
+                </div>
+              ) : (
+                interns.map((stu) => {
+                  const isSelected = chatStudentId === stu.student_id;
+                  const unreadForStu = messages.filter(
+                    (m) => m.student_id === stu.student_id && m.sender_role === "STUDENT" && !m.is_read
+                  ).length;
+                  return (
+                    <button
+                      key={stu.student_id}
+                      onClick={() => setChatStudentId(stu.student_id)}
+                      className={`w-full text-left p-3 rounded-xl border transition-all flex items-center justify-between gap-2 ${
+                        isSelected
+                          ? "bg-blue-50/80 border-blue-300 shadow-2xs"
+                          : "bg-white hover:bg-slate-50 border-slate-200/80"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <strong className="text-xs font-bold text-slate-900 block truncate">
+                          {stu.student_name}
+                        </strong>
+                        <span className="text-[10px] text-slate-500 block truncate">
+                          {stu.student_email}
+                        </span>
+                        <span className="text-[10px] text-blue-600 font-semibold block truncate mt-0.5">
+                          {stu.company_name} • {stu.internship_title}
+                        </span>
+                      </div>
+                      {unreadForStu > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold">
+                          {unreadForStu}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </GlassCard>
+
+          {/* Conversation Thread */}
+          <GlassCard className="p-5 sm:p-6 lg:col-span-2 flex flex-col">
+            {(() => {
+              const activeStudent = interns.find((s) => s.student_id === chatStudentId);
+              const studentMessages = messages.filter((m) => m.student_id === chatStudentId);
+
+              if (!activeStudent) {
+                return (
+                  <div className="p-12 text-center text-xs text-slate-400">
+                    Select an assigned student on the left to view or send messages.
+                  </div>
+                );
+              }
+
+              return (
+                <>
+                  <div className="pb-3 mb-4 border-b border-slate-200/80 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-900">
+                        Conversation with {activeStudent.student_name}
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        {activeStudent.student_email} • {activeStudent.company_name} ({activeStudent.internship_title})
+                      </p>
+                    </div>
+                    <StatusBadge status={activeStudent.attention_status} size="sm" />
+                  </div>
+
+                  <div className="space-y-3 max-h-96 overflow-y-auto pr-1 mb-4 flex-1">
+                    {studentMessages.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                        No messages exchanged with {activeStudent.student_name} yet. Send a message below to start the conversation.
+                      </div>
+                    ) : (
+                      studentMessages.map((msg) => {
+                        const isMe = msg.sender_role === "MENTOR";
+                        return (
+                          <div
+                            key={msg.id}
+                            className={`p-3.5 rounded-2xl border text-xs ${
+                              isMe
+                                ? "bg-blue-50/70 border-blue-200/80 ml-6"
+                                : "bg-slate-50 border-slate-200/80 mr-6"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                              <strong className="font-bold text-slate-900">
+                                {msg.sender_name} ({msg.sender_role === "MENTOR" ? "Faculty Mentor" : "Student"})
+                              </strong>
+                              <span className="text-[10px] text-slate-400">
+                                {msg.created_at ? new Date(msg.created_at).toLocaleString() : "Just now"}
+                              </span>
+                            </div>
+                            <p className="text-slate-700 leading-relaxed whitespace-pre-line">
+                              {msg.content}
+                            </p>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  <form onSubmit={handleSendMentorMessage} className="flex gap-2 pt-3 border-t border-slate-100">
+                    <input
+                      type="text"
+                      value={messageDraft}
+                      onChange={(e) => setMessageDraft(e.target.value)}
+                      placeholder={`Write a message to ${activeStudent.student_name}...`}
+                      className="sims-input flex-1 text-xs"
+                    />
+                    <button
+                      type="submit"
+                      disabled={sendingMessage || !messageDraft.trim()}
+                      className="sims-btn-primary px-4 py-2 text-xs font-bold inline-flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      <Send size={13} />
+                      <span>{sendingMessage ? "Sending..." : "Send"}</span>
+                    </button>
+                  </form>
+                </>
+              );
+            })()}
+          </GlassCard>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* 2C. PARTNER COMPANIES TAB (REAL DB DATA)                   */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      {activeTab === "companies" && (
+        <GlassCard className="p-6">
+          <SectionHeader
+            title="Partner Companies &amp; International Opportunities"
+            badge={`${partnerInternships.length} Verified Listings`}
+            subtitle="Live corporate and international internship placements from the database"
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            {partnerInternships.map((item) => (
+              <div
+                key={item.id}
+                className="p-4 rounded-xl border border-slate-200/80 bg-white shadow-2xs space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900">{item.company_name}</h4>
+                    <p className="text-xs font-semibold text-blue-600">{item.title}</p>
+                  </div>
+                  <StatusBadge status={item.status} size="sm" />
+                </div>
+                <p className="text-[11px] text-slate-600 line-clamp-2">{item.description}</p>
+                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-100">
+                  <span>{item.location}</span>
+                  <span>${item.stipend}/mo • {item.duration_weeks} wks</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════ */}
+      {/* 2D. COHORT ANALYTICS & NOTIFICATIONS TAB                   */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      {activeTab === "analytics" && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <GlassCard className="p-6">
+            <SectionHeader
+              title="Supervised Cohort Analytics"
+              subtitle="Real-time metrics for students assigned to your faculty supervision"
+            />
+            <div className="space-y-4 mt-4">
+              {interns.map((stu) => (
+                <div key={stu.student_id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <strong className="text-xs font-bold text-slate-900">
+                      {stu.student_name} — {stu.company_name}
+                    </strong>
+                    <span className="text-xs font-extrabold text-blue-600">
+                      {stu.attention_score} / 100
+                    </span>
+                  </div>
+                  <ProgressBar
+                    value={stu.attention_score}
+                    tone={stu.attention_status === "NEEDS_ATTENTION" ? "red" : stu.attention_status === "MONITOR" ? "amber" : "emerald"}
+                    size="sm"
+                  />
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+
+          <GlassCard className="p-6">
+            <SectionHeader
+              title="Faculty Notifications"
+              subtitle="Database alerts for mentor assignments, messages, and student reports"
+            />
+            <div className="space-y-2.5 mt-4 max-h-96 overflow-y-auto">
+              {mentorNotifications.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                  No notifications recorded.
+                </div>
+              ) : (
+                mentorNotifications.map((n) => (
+                  <div key={n.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <strong className="font-bold text-slate-900">{n.title}</strong>
+                      <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                        {n.notification_type}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600">{n.message}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </GlassCard>
+        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════ */}
@@ -1120,15 +1484,24 @@ export default function MentorPortal() {
                 <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
                   Recorded Interventions Log ({interventionLogs[selectedIntern.student_id].length})
                 </h4>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-52 overflow-y-auto">
                   {interventionLogs[selectedIntern.student_id].map((log) => (
                     <div key={log.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200/70 text-xs">
                       <div className="flex items-center justify-between mb-1">
-                        <strong className="text-slate-900">{log.type}</strong>
-                        <span className="text-[10px] text-slate-400">{log.timestamp}</span>
+                        <strong className="text-slate-900">{log.intervention_type || log.type}</strong>
+                        <span className="text-[10px] text-slate-400">
+                          {log.created_at ? new Date(log.created_at).toLocaleDateString() : log.timestamp}
+                        </span>
                       </div>
                       <p className="text-slate-600 leading-relaxed">{log.notes}</p>
-                      <span className="text-[10px] text-slate-400 block mt-1">Recorded by: {log.faculty}</span>
+                      {log.action_taken && (
+                        <div className="mt-1 text-[11px] text-blue-700 font-medium">
+                          <strong>Action Plan:</strong> {log.action_taken}
+                        </div>
+                      )}
+                      <span className="text-[10px] text-slate-400 block mt-1">
+                        Recorded by: {log.mentor_name || log.faculty || "Faculty Supervisor"}
+                      </span>
                     </div>
                   ))}
                 </div>

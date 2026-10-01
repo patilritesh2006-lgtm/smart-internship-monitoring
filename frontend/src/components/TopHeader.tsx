@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
-import { Bell, Menu, Search, Settings, Sparkles, CheckCircle2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Bell, Menu, Search, CheckCircle2, Clock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { api } from "@/lib/api";
 import { AvatarInitials } from "./Sidebar";
 import { SimsLogo } from "./SimsLogo";
 
@@ -23,6 +24,42 @@ export function TopHeader({
 }: TopHeaderProps) {
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    let mounted = true;
+    api
+      .getNotifications()
+      .then((res) => {
+        if (mounted && Array.isArray(res)) {
+          setNotifications(res);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [user, notificationCount]);
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length || notificationCount;
+
+  const handleMarkRead = async (id: number) => {
+    try {
+      await api.markNotificationRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+      );
+    } catch {}
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await api.markAllNotificationsRead();
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    } catch {}
+  };
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
@@ -33,19 +70,19 @@ export function TopHeader({
     const role = user?.role?.toUpperCase();
     if (role === "STUDENT") {
       return {
-        idText: "Student ID: #84920",
+        idText: user?.email ? `Student • ${user.email}` : "Student Portal",
         roleName: "Student",
       };
     }
     if (role === "MENTOR") {
       return {
-        idText: "Faculty Mentor • #FAC-4019",
+        idText: user?.email ? `Faculty Mentor • ${user.email}` : "Faculty Mentor",
         roleName: "Faculty Mentor",
       };
     }
     return {
-      idText: "Administrator • #ADM-1002",
-      roleName: "Dean of Academics",
+      idText: user?.email ? `Administrator • ${user.email}` : "Administrator",
+      roleName: "Institutional Admin",
     };
   };
 
@@ -72,9 +109,6 @@ export function TopHeader({
             <h1 className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight truncate">
               {title}
             </h1>
-            <span className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 shrink-0">
-              Demo Mode — Synthetic Data
-            </span>
           </div>
           {subtitle && (
             <p className="text-[11px] text-slate-400 font-medium hidden md:block truncate">
@@ -105,19 +139,81 @@ export function TopHeader({
       </div>
 
       {/* Right: Notification Bell & User Profile Widget */}
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0 relative">
         {/* Notifications (Circular Button matching Stitch design) */}
         <button
+          onClick={() => setNotifOpen((prev) => !prev)}
           className="relative w-9 h-9 rounded-full bg-slate-100/80 hover:bg-slate-200/60 border border-slate-200/70 text-slate-600 hover:text-slate-900 flex items-center justify-center transition-all-fast"
           aria-label="Notifications"
         >
           <Bell size={17} />
-          {notificationCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-600 rounded-full ring-2 ring-white" />
+          {unreadCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 bg-blue-600 text-white text-[9px] font-bold rounded-full ring-2 ring-white flex items-center justify-center">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
           )}
         </button>
 
-        {/* User profile area (Stitch screenshot: AK circle + Aarav Kulkarni + Student ID: #84920) */}
+        {notifOpen && (
+          <div className="absolute right-0 top-12 w-80 sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-xl z-50 overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+              <div>
+                <h4 className="text-xs font-extrabold text-slate-900">Notifications</h4>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  {unreadCount} unread alert{unreadCount === 1 ? "" : "s"}
+                </p>
+              </div>
+              {unreadCount > 0 && (
+                <button
+                  onClick={handleMarkAllRead}
+                  className="text-[11px] font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
+                >
+                  <CheckCircle2 size={12} /> Mark all read
+                </button>
+              )}
+            </div>
+            <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+              {notifications.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400">
+                  No notifications yet.
+                </div>
+              ) : (
+                notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={() => !n.is_read && handleMarkRead(n.id)}
+                    className={`p-3.5 text-left transition-colors cursor-pointer ${
+                      n.is_read ? "bg-white hover:bg-slate-50" : "bg-blue-50/40 hover:bg-blue-50/70"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span className="text-xs font-bold text-slate-900 leading-snug">
+                        {n.title}
+                      </span>
+                      {!n.is_read && (
+                        <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0 mt-1" />
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed mb-1.5">
+                      {n.message}
+                    </p>
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                      <span className="uppercase tracking-wider font-bold text-[9px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                        {n.notification_type || "ALERT"}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock size={10} />
+                        {n.created_at ? new Date(n.created_at).toLocaleDateString() : "Recent"}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* User profile area */}
         {user && (
           <div className="flex items-center gap-2.5 pl-1 sm:pl-2">
             <AvatarInitials name={user.full_name} size={36} />

@@ -21,8 +21,8 @@ r = httpx.post(
 detail = r.json().get("detail", r.text[:200]) if r.headers.get("content-type", "").startswith("application") else r.text[:200]
 print(f"  Register as ADMIN -> Status: {r.status_code}")
 print(f"  Response detail: {detail}")
-if r.status_code == 400:
-    print("  [FIXED] ADMIN self-registration correctly blocked")
+if r.status_code in [400, 409]:
+    print("  [FIXED] ADMIN self-registration correctly blocked (409 Conflict)")
 elif r.status_code == 201:
     print("  [STILL VULNERABLE] ADMIN self-registration still allowed!")
 

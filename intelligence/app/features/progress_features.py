@@ -61,6 +61,8 @@ class ProgressFeatures:
     total_tasks: int = 0
     completed_tasks: int = 0
     incomplete_tasks: int = 0
+    overdue_tasks: int = 0
+    is_early_stage: bool = False
     expected_reports: int = 0
     submitted_reports: int = 0
     missing_reports: int = 0
@@ -85,6 +87,8 @@ class ProgressFeatures:
             "total_tasks": self.total_tasks,
             "completed_tasks": self.completed_tasks,
             "incomplete_tasks": self.incomplete_tasks,
+            "overdue_tasks": self.overdue_tasks,
+            "is_early_stage": self.is_early_stage,
             "expected_reports": self.expected_reports,
             "submitted_reports": self.submitted_reports,
             "missing_reports": self.missing_reports,
@@ -182,10 +186,12 @@ def extract_progress_features(
 
     if start_date:
         days_active = max(0, (current_time - start_date).days)
-        elapsed_weeks = min(max(1, (days_active // 7) + 1), duration_weeks)
+        elapsed_weeks = min(max(1, days_active // 7), duration_weeks)
     else:
         days_active = 0
         elapsed_weeks = max(1, len(report_list))
+
+    is_early_stage = bool(internship is None or start_date is None or days_active < 7)
 
     # Days remaining calculation
     days_remaining: Optional[int] = None
@@ -201,8 +207,24 @@ def extract_progress_features(
     completed_tasks = sum(1 for t in task_list if getattr(t, "is_completed", False))
     incomplete_tasks = total_tasks - completed_tasks
 
+    overdue_tasks = 0
+    future_due_tasks = 0
+    for t in task_list:
+        if not getattr(t, "is_completed", False):
+            t_due = _ensure_utc(getattr(t, "due_date", None))
+            if t_due is not None:
+                if t_due < current_time:
+                    overdue_tasks += 1
+                else:
+                    future_due_tasks += 1
+
     if total_tasks > 0:
-        task_completion_pct = (completed_tasks / total_tasks) * 100.0
+        all_incomplete_are_future = incomplete_tasks > 0 and overdue_tasks == 0 and future_due_tasks == incomplete_tasks
+        if overdue_tasks == 0 and (is_early_stage or all_incomplete_are_future):
+            # Newly assigned or upcoming tasks with future due dates and zero overdue tasks
+            task_completion_pct = 100.0
+        else:
+            task_completion_pct = (completed_tasks / total_tasks) * 100.0
     else:
         # If no tasks have been assigned yet, 100% baseline with note
         task_completion_pct = 100.0
@@ -219,14 +241,19 @@ def extract_progress_features(
                 break
 
     # 3. Weekly Report Feature Derivation
-    expected_reports = elapsed_weeks
     submitted_reports = len(report_list)
-    missing_reports = max(0, expected_reports - submitted_reports)
-
-    if expected_reports > 0:
-        report_submission_pct = min(100.0, (submitted_reports / expected_reports) * 100.0)
-    else:
+    if is_early_stage:
+        # First week has not yet elapsed (or no active internship yet): no weekly report is overdue
+        expected_reports = submitted_reports
+        missing_reports = 0
         report_submission_pct = 100.0
+    else:
+        expected_reports = elapsed_weeks
+        missing_reports = max(0, expected_reports - submitted_reports)
+        if expected_reports > 0:
+            report_submission_pct = min(100.0, (submitted_reports / expected_reports) * 100.0)
+        else:
+            report_submission_pct = 100.0
 
     # 4. Mentor Feedback Derivation
     reviewed_scores = [
@@ -291,12 +318,15 @@ def extract_progress_features(
     submitted_week_numbers = {
         getattr(r, "week_number", 0) for r in report_list if getattr(r, "week_number", None)
     }
-    covered_expected_weeks = sum(1 for w in range(1, expected_reports + 1) if w in submitted_week_numbers)
-    week_coverage_ratio = (covered_expected_weeks / max(1, expected_reports)) * 100.0
+    if expected_reports == 0:
+        week_coverage_ratio = 100.0
+    else:
+        covered_expected_weeks = sum(1 for w in range(1, expected_reports + 1) if w in submitted_week_numbers)
+        week_coverage_ratio = (covered_expected_weeks / max(1, expected_reports)) * 100.0
 
     # Factor B: Recency cadence score (30%)
     if days_since_last_activity is None:
-        recency_score = 75.0
+        recency_score = 100.0 if (is_early_stage and overdue_tasks == 0) else 75.0
     elif days_since_last_activity <= 7:
         recency_score = 100.0
     elif days_since_last_activity <= 14:
@@ -316,6 +346,9 @@ def extract_progress_features(
         (recency_score * 0.30) +
         (cadence_score * 0.20)
     )
+    if overdue_tasks > 0 and total_tasks > 0:
+        overdue_penalty = (overdue_tasks / total_tasks) * 45.0
+        activity_consistency = max(0.0, activity_consistency - overdue_penalty)
     activity_consistency = max(0.0, min(100.0, activity_consistency))
 
     # --------------------------------------------------------------------------
@@ -366,6 +399,8 @@ def extract_progress_features(
         total_tasks=total_tasks,
         completed_tasks=completed_tasks,
         incomplete_tasks=incomplete_tasks,
+        overdue_tasks=overdue_tasks,
+        is_early_stage=is_early_stage,
         expected_reports=expected_reports,
         submitted_reports=submitted_reports,
         missing_reports=missing_reports,

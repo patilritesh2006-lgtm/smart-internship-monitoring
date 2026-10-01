@@ -144,20 +144,11 @@ test("Negative academic year in register → 422/400", "POST", f"{BASE}/api/auth
 # ================================================================
 # 6. PRIVILEGE ESCALATION VIA REGISTRATION
 # ================================================================
-print("\n[6] PRIVILEGE ESCALATION — Register as ADMIN")
-# Attempt to register a new ADMIN account (should succeed at registration since the app allows ADMIN role)
-# We document this as a finding
-r_priv = test("Register with role=ADMIN", "POST", f"{BASE}/api/auth/register",
+print("\n[6] PRIVILEGE ESCALATION — Register as ADMIN (Enforce EXACTLY ONE ADMIN)")
+r_priv = test("Register with role=ADMIN → 409", "POST", f"{BASE}/api/auth/register",
               json={"email": "probe_admin@sectest.local", "password": "SecProbe1234",
-                    "full_name": "Security Probe", "role": "ADMIN"})
-if r_priv and r_priv.status_code == 201:
-    priv_token = r_priv.json().get("access_token")
-    print("  *** FINDING: Anyone can self-register as ADMIN via API ***")
-    if priv_token:
-        r_chk = test("Self-registered ADMIN can access admin analytics → ?", "GET", f"{BASE}/api/admin/analytics",
-                     headers={"Authorization": f"Bearer {priv_token}"})
-        if r_chk and r_chk.status_code == 200:
-            print("  *** CRITICAL: Self-registered ADMIN can fully access admin dashboard ***")
+                    "full_name": "Security Probe", "role": "ADMIN"},
+              expected_status=409)
 
 # ================================================================
 # 7. IDOR — CROSS-USER RESOURCE ACCESS

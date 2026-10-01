@@ -16,11 +16,13 @@ import { ProgressAttentionCard } from "@/components/ProgressAttentionCard";
 import { IntelligenceExplainerModal } from "@/components/IntelligenceExplainerModal";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { downloadRealPdf } from "@/lib/pdfExport";
 import {
   AlertCircle,
   AlertTriangle,
   ArrowRight,
   Award,
+  Bell,
   BookOpen,
   Briefcase,
   Calendar,
@@ -36,6 +38,7 @@ import {
   FileText,
   HelpCircle,
   Lock,
+  Mail,
   MessageSquare,
   Paperclip,
   Plus,
@@ -53,14 +56,6 @@ import {
   X,
 } from "lucide-react";
 
-const WEEKDAYS = [
-  { key: "MON", label: "MON", full: "Monday", date: "Oct 23", defaultHours: 8.0 },
-  { key: "TUE", label: "TUE", full: "Tuesday", date: "Oct 24", defaultHours: 7.5 },
-  { key: "WED", label: "WED", full: "Wednesday", date: "Oct 25", defaultHours: 8.0 },
-  { key: "THU", label: "THU", full: "Thursday", date: "Oct 26", defaultHours: 7.5 },
-  { key: "FRI", label: "FRI", full: "Friday", date: "Oct 27", defaultHours: 7.5 },
-];
-
 export default function StudentPortal() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -76,6 +71,10 @@ export default function StudentPortal() {
   const [attention, setAttention] = useState<any>(null);
   const [openInternships, setOpenInternships] = useState<any[]>([]);
   const [applications, setApplications] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [studentMsgDraft, setStudentMsgDraft] = useState("");
+  const [sendingStudentMsg, setSendingStudentMsg] = useState(false);
+  const [studentNotifications, setStudentNotifications] = useState<any[]>([]);
 
   // Enhanced Weekly Report & Timesheet State
   const [reportWeek, setReportWeek] = useState(1);
@@ -93,20 +92,94 @@ export default function StudentPortal() {
   const [selectedReportDetail, setSelectedReportDetail] = useState<any | null>(null);
   const [timesheetSubTab, setTimesheetSubTab] = useState<"form" | "history">("form");
 
-  // Evidence files
-  const [attachments, setAttachments] = useState([
-    { name: "weekly_engineering_log.pdf", size: "2.4 MB", date: "Verified Archive", type: "pdf" },
-    { name: "github.com/org/project/pull/42", size: "Code Repository PR", date: "Linked", type: "link" },
-  ]);
+  // Evidence files derived from user uploads/links
+  const [attachments, setAttachments] = useState<
+    { name: string; size: string; date: string; type: string }[]
+  >([]);
 
-  // Skill gap state
+  // Skill gap & Skill Dependency Graph state
   const [selectedGapInternship, setSelectedGapInternship] = useState<any>(null);
   const [gapResult, setGapResult] = useState<any>(null);
   const [analyzingGap, setAnalyzingGap] = useState(false);
+  const [depGraph, setDepGraph] = useState<any>(null);
+  const [loadingDepGraph, setLoadingDepGraph] = useState(false);
+
+  // Feature 1: Domain-Based Internship Search state
+  const [domains, setDomains] = useState<string[]>([]);
+  const [selectedDomain, setSelectedDomain] = useState<string>("ALL");
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchingInternships, setSearchingInternships] = useState(false);
+
+  // Feature 2: Knowledge Handoff state
+  const [handoffs, setHandoffs] = useState<any[]>([]);
+  const [showHandoffModal, setShowHandoffModal] = useState(false);
+  const [editingHandoffId, setEditingHandoffId] = useState<number | null>(null);
+  const [savingHandoff, setSavingHandoff] = useState(false);
+  const [handoffMsg, setHandoffMsg] = useState<string | null>(null);
+  const [handoffForm, setHandoffForm] = useState({
+    title: "",
+    overview: "",
+    completed_work: "",
+    technologies: "Python, FastAPI, React, Docker",
+    learned_concepts: "",
+    implementation_notes: "",
+    challenges: "",
+    solutions: "",
+    resources: "",
+    repository_url: "",
+    deployment_url: "",
+    pending_work: "",
+    recommendations: "",
+    known_issues: "",
+    final_notes: "",
+  });
+
+  // Feature 4: Internship Completion & Certificate state
+  const [completionStatus, setCompletionStatus] = useState<any>(null);
+  const [certificates, setCertificates] = useState<any[]>([]);
+  const [generatingCert, setGeneratingCert] = useState(false);
+  const [certMsg, setCertMsg] = useState<string | null>(null);
 
   // Profile skills
   const [newSkill, setNewSkill] = useState("");
   const [updatingProfile, setUpdatingProfile] = useState(false);
+
+  // Application submission & form modal state
+  const [applyingId, setApplyingId] = useState<number | null>(null);
+  const [applicationSuccessMsg, setApplicationSuccessMsg] = useState<string | null>(null);
+  const [showApplyModal, setShowApplyModal] = useState(false);
+  const [applyingInternship, setApplyingInternship] = useState<any | null>(null);
+  const [isReviewingAppForm, setIsReviewingAppForm] = useState(false);
+  const [appFormError, setAppFormError] = useState<string | null>(null);
+  const [appSkillInput, setAppSkillInput] = useState("");
+  const [appForm, setAppForm] = useState({
+    full_name: "",
+    email: "",
+    phone: "",
+    college: "University Institute of Technology",
+    degree: "B.Tech / B.E.",
+    department: "Computer Science & Engineering",
+    current_year: 3,
+    graduation_year: 2027,
+    technical_skills: [] as string[],
+    programming_languages: "Python, SQL",
+    frameworks: "FastAPI, React",
+    tools: "Git, Docker",
+    soft_skills: "Problem Solving, Team Collaboration, Communication",
+    cgpa: "8.8",
+    relevant_coursework: "Data Structures & Algorithms, DBMS, Operating Systems, Software Engineering",
+    previous_internship_experience: "",
+    work_experience: "",
+    project_title: "",
+    project_description: "",
+    project_technologies: "",
+    resume_url: "",
+    certifications: "",
+    github_url: "",
+    linkedin_url: "",
+    portfolio_url: "",
+    additional_info: "",
+  });
 
   useEffect(() => {
     if (!authLoading) {
@@ -120,7 +193,21 @@ export default function StudentPortal() {
     setLoading(true);
     setError(null);
     try {
-      const [prof, intern, tsk, rep, att, opens, apps] = await Promise.allSettled([
+      const [
+        prof,
+        intern,
+        tsk,
+        rep,
+        att,
+        opens,
+        apps,
+        msgs,
+        notifs,
+        doms,
+        hnds,
+        compStat,
+        certs,
+      ] = await Promise.allSettled([
         api.getMyProfile(),
         api.getMyInternship(),
         api.getMyTasks(),
@@ -128,6 +215,12 @@ export default function StudentPortal() {
         api.getMyAttention(),
         api.listInternships({ status: "AVAILABLE" }),
         api.getMyApplications(),
+        api.getMessages(),
+        api.getNotifications(),
+        api.listInternshipDomains(),
+        api.getMyHandoffs(),
+        api.getMyCompletionStatus(),
+        api.getMyCertificates(),
       ]);
       if (prof.status === "fulfilled") {
         setProfile(prof.value);
@@ -150,23 +243,33 @@ export default function StudentPortal() {
       if (att.status === "fulfilled") setAttention(att.value);
       if (opens.status === "fulfilled") setOpenInternships(opens.value || []);
       if (apps.status === "fulfilled") setApplications(apps.value || []);
+      if (msgs.status === "fulfilled") setMessages(msgs.value || []);
+      if (notifs.status === "fulfilled") setStudentNotifications(notifs.value || []);
+      if (doms.status === "fulfilled") setDomains(doms.value || []);
+      if (hnds.status === "fulfilled") setHandoffs(hnds.value || []);
+      if (compStat.status === "fulfilled") setCompletionStatus(compStat.value);
+      if (certs.status === "fulfilled") setCertificates(certs.value || []);
 
-      // Auto-trigger deterministic skill gap analysis if internship has required skills
+      // Auto-trigger deterministic skill gap & dependency graph analysis if internship has required skills
       const loadedInternship = intern.status === "fulfilled" ? intern.value : null;
       const loadedProfile = prof.status === "fulfilled" ? prof.value : null;
-      if (
-        loadedInternship?.required_skills &&
-        loadedInternship.required_skills.length > 0 &&
-        loadedProfile?.skills &&
-        loadedProfile.skills.length > 0
-      ) {
+      const targetIntern = loadedInternship || (opens.status === "fulfilled" && opens.value?.[0]) || null;
+      if (targetIntern && loadedProfile?.skills && loadedProfile.skills.length > 0) {
         try {
-          const gap = await api.analyzeSkillGap({
-            student_skills: loadedProfile.skills,
-            required_skills: loadedInternship.required_skills,
-          });
+          const [gap, graph] = await Promise.all([
+            api.analyzeSkillGap({
+              student_skills: loadedProfile.skills,
+              required_skills: targetIntern.required_skills || [],
+            }),
+            api.computeSkillDependencyGraph({
+              student_skills: loadedProfile.skills,
+              target_skills: targetIntern.required_skills || [],
+              internship_id: typeof targetIntern.id === "number" ? targetIntern.id : undefined,
+            }),
+          ]);
           setGapResult(gap);
-          setSelectedGapInternship(loadedInternship);
+          setDepGraph(graph);
+          setSelectedGapInternship(targetIntern);
         } catch {
           // Non-blocking background analysis
         }
@@ -178,6 +281,184 @@ export default function StudentPortal() {
     }
   };
 
+  const handleSearchInternships = async (domainVal?: string, queryVal?: string) => {
+    const dom = domainVal !== undefined ? domainVal : selectedDomain;
+    const q = queryVal !== undefined ? queryVal : searchQuery;
+    setSearchingInternships(true);
+    try {
+      const results = await api.listInternships({
+        status: "AVAILABLE",
+        domain: dom && dom !== "ALL" ? dom : undefined,
+        search: q.trim() || undefined,
+      });
+      setOpenInternships(results || []);
+    } catch (e: any) {
+      setError(e.message || "Failed to filter internships");
+    } finally {
+      setSearchingInternships(false);
+    }
+  };
+
+  const handleOpenHandoffModal = (existing?: any) => {
+    setHandoffMsg(null);
+    if (existing) {
+      setEditingHandoffId(existing.id);
+      setHandoffForm({
+        title: existing.title || "",
+        overview: existing.overview || "",
+        completed_work: existing.completed_work || "",
+        technologies: Array.isArray(existing.technologies) ? existing.technologies.join(", ") : "",
+        learned_concepts: existing.learned_concepts || "",
+        implementation_notes: existing.implementation_notes || "",
+        challenges: existing.challenges || "",
+        solutions: existing.solutions || "",
+        resources: existing.resources || "",
+        repository_url: existing.repository_url || "",
+        deployment_url: existing.deployment_url || "",
+        pending_work: existing.pending_work || "",
+        recommendations: existing.recommendations || "",
+        known_issues: existing.known_issues || "",
+        final_notes: existing.final_notes || "",
+      });
+    } else {
+      setEditingHandoffId(null);
+      setHandoffForm({
+        title: `${internship?.title || "Internship"} — Knowledge Transfer & Handoff Document`,
+        overview: `Comprehensive knowledge transfer covering architecture, deliverables, and operational procedures for ${internship?.title || "the placement"}.`,
+        completed_work: "",
+        technologies: (internship?.required_skills || profile?.skills || ["Python", "FastAPI", "React"]).join(", "),
+        learned_concepts: "",
+        implementation_notes: "",
+        challenges: "",
+        solutions: "",
+        resources: "",
+        repository_url: "https://github.com/org/project-repo",
+        deployment_url: "",
+        pending_work: "",
+        recommendations: "",
+        known_issues: "",
+        final_notes: "",
+      });
+    }
+    setShowHandoffModal(true);
+  };
+
+  const handleSaveHandoff = async (statusVal: "DRAFT" | "SUBMITTED") => {
+    if (!handoffForm.title.trim() || !handoffForm.overview.trim() || !handoffForm.completed_work.trim()) {
+      setError("Knowledge Handoff requires Title, Project Overview, and Completed Work Summary.");
+      return;
+    }
+    setSavingHandoff(true);
+    setError(null);
+    try {
+      const payload = {
+        internship_id: typeof internship?.id === "number" ? internship.id : undefined,
+        title: handoffForm.title.trim(),
+        overview: handoffForm.overview.trim(),
+        completed_work: handoffForm.completed_work.trim(),
+        technologies: handoffForm.technologies
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        learned_concepts: handoffForm.learned_concepts.trim() || undefined,
+        implementation_notes: handoffForm.implementation_notes.trim() || undefined,
+        challenges: handoffForm.challenges.trim() || undefined,
+        solutions: handoffForm.solutions.trim() || undefined,
+        resources: handoffForm.resources.trim() || undefined,
+        repository_url: handoffForm.repository_url.trim() || undefined,
+        deployment_url: handoffForm.deployment_url.trim() || undefined,
+        pending_work: handoffForm.pending_work.trim() || undefined,
+        recommendations: handoffForm.recommendations.trim() || undefined,
+        known_issues: handoffForm.known_issues.trim() || undefined,
+        final_notes: handoffForm.final_notes.trim() || undefined,
+        status: statusVal,
+      };
+      if (editingHandoffId) {
+        await api.updateMyHandoff(editingHandoffId, payload);
+      } else {
+        await api.createMyHandoff(payload);
+      }
+      const updated = await api.getMyHandoffs();
+      setHandoffs(updated || []);
+      setShowHandoffModal(false);
+      setHandoffMsg(
+        statusVal === "SUBMITTED"
+          ? "Knowledge Handoff submitted to your mentor and admin for review!"
+          : "Knowledge Handoff saved as draft."
+      );
+    } catch (e: any) {
+      setError(e.message || "Failed to save Knowledge Handoff");
+    } finally {
+      setSavingHandoff(false);
+    }
+  };
+
+  const handleGenerateCertificate = async (targetInternshipId?: number) => {
+    const intId = targetInternshipId || internship?.id || completionStatus?.internship_id;
+    if (!intId) {
+      setError("No active internship found for certificate generation.");
+      return;
+    }
+    setGeneratingCert(true);
+    setError(null);
+    setCertMsg(null);
+    try {
+      const cert = await api.generateMyCertificate(intId);
+      const [certs, compStat] = await Promise.all([
+        api.getMyCertificates(),
+        api.getMyCompletionStatus(intId),
+      ]);
+      setCertificates(certs || [cert]);
+      setCompletionStatus(compStat);
+      setCertMsg(`Official Internship Completion Certificate (${cert.certificate_id}) generated!`);
+    } catch (e: any) {
+      setError(e.message || "Certificate is only available after full internship completion.");
+    } finally {
+      setGeneratingCert(false);
+    }
+  };
+
+  const handleDownloadCertificatePdf = async (certificateId: string) => {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("sims_token") : null;
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api";
+      const res = await fetch(`${baseUrl}/students/certificates/${encodeURIComponent(certificateId)}/download`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Failed to download certificate PDF");
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Certificate_${certificateId}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e.message || "Failed to download certificate PDF");
+    }
+  };
+
+  const handleSendStudentMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!studentMsgDraft.trim()) return;
+    setSendingStudentMsg(true);
+    setError(null);
+    try {
+      const created = await api.sendMessage({ content: studentMsgDraft.trim() });
+      setMessages((prev) => [...prev, created]);
+      setStudentMsgDraft("");
+    } catch (e: any) {
+      setError(e.message || "Failed to send message to mentor");
+    } finally {
+      setSendingStudentMsg(false);
+    }
+  };
+
   const handleToggleTask = async (taskId: number) => {
     try {
       // Optimistic update for instantaneous feedback
@@ -185,9 +466,16 @@ export default function StudentPortal() {
         prev.map((t) => (t.id === taskId ? { ...t, is_completed: !t.is_completed } : t))
       );
       await api.toggleTask(taskId);
-      const [tsk, att] = await Promise.all([api.getMyTasks(), api.getMyAttention()]);
+      const [tsk, att, apps, compStat] = await Promise.all([
+        api.getMyTasks(),
+        api.getMyAttention(),
+        api.getMyApplications(),
+        api.getMyCompletionStatus().catch(() => null),
+      ]);
       setTasks(tsk || []);
       setAttention(att);
+      if (apps) setApplications(apps);
+      if (compStat) setCompletionStatus(compStat);
     } catch (e: any) {
       setError(e.message || "Failed to update milestone task");
       const tsk = await api.getMyTasks();
@@ -207,6 +495,9 @@ export default function StudentPortal() {
     }
     if (isNaN(reportHours) || reportHours <= 0 || reportHours > 80) {
       errors.reportHours = "Please enter valid logged hours between 0.5 and 80.0 hours.";
+    }
+    if (!evidenceUrl || !evidenceUrl.trim()) {
+      errors.evidenceUrl = "Verification evidence or artifact URL/reference is compulsory for weekly reports.";
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -252,7 +543,7 @@ export default function StudentPortal() {
     if (submittingReport) return; // Prevent duplicate submission while in flight
 
     if (!validateReportForm()) {
-      setReportMsg({ type: "error", text: "Please correct the required fields before submitting." });
+      setReportMsg({ type: "error", text: "Please correct the required fields (including Required Evidence URL) before submitting." });
       return;
     }
 
@@ -264,6 +555,8 @@ export default function StudentPortal() {
         achievements: formatAchievementsPayload(),
         challenges: challengesFaced.trim() || undefined,
         hours_spent: Number(reportHours),
+        evidence_url: evidenceUrl.trim(),
+        require_evidence: true,
       };
 
       await api.submitReport(payload);
@@ -274,15 +567,17 @@ export default function StudentPortal() {
       });
 
       // Refresh data
-      const [rep, att, tsk] = await Promise.all([
+      const [rep, att, tsk, compStat] = await Promise.all([
         api.getMyReports(),
         api.getMyAttention(),
         api.getMyTasks(),
+        api.getMyCompletionStatus().catch(() => null),
       ]);
       const updatedReports = rep || [];
       setReports(updatedReports);
       setAttention(att);
       setTasks(tsk || []);
+      if (compStat) setCompletionStatus(compStat);
 
       // Reset form
       setWorkCompleted("");
@@ -310,9 +605,9 @@ export default function StudentPortal() {
     setAttachments([
       ...attachments,
       {
-        name: `sprint_evidence_week_${reportWeek}_log.pdf`,
-        size: "1.8 MB",
-        date: "Just now",
+        name: `week_${reportWeek}_progress_evidence.pdf`,
+        size: `${reportHours} hrs logged`,
+        date: new Date().toLocaleDateString(),
         type: "pdf",
       },
     ]);
@@ -325,18 +620,28 @@ export default function StudentPortal() {
   const handleAnalyzeGap = async (internshipObj: any) => {
     if (!profile?.skills) return;
     setAnalyzingGap(true);
+    setLoadingDepGraph(true);
     setGapResult(null);
     setSelectedGapInternship(internshipObj);
     try {
-      const result = await api.analyzeSkillGap({
-        student_skills: profile.skills,
-        required_skills: internshipObj.required_skills || [],
-      });
+      const [result, graph] = await Promise.all([
+        api.analyzeSkillGap({
+          student_skills: profile.skills,
+          required_skills: internshipObj.required_skills || [],
+        }),
+        api.computeSkillDependencyGraph({
+          student_skills: profile.skills,
+          target_skills: internshipObj.required_skills || [],
+          internship_id: typeof internshipObj.id === "number" ? internshipObj.id : undefined,
+        }),
+      ]);
       setGapResult(result);
+      setDepGraph(graph);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setAnalyzingGap(false);
+      setLoadingDepGraph(false);
     }
   };
 
@@ -363,15 +668,228 @@ export default function StudentPortal() {
     }
   };
 
+  const openApplyModal = (opp: any) => {
+    setApplyingInternship(opp);
+    setIsReviewingAppForm(false);
+    setAppFormError(null);
+    setAppSkillInput("");
+    const yr = profile?.academic_year || 3;
+    const existingSkills = Array.isArray(profile?.skills) && profile.skills.length > 0 ? [...profile.skills] : ["Python", "SQL"];
+    setAppForm({
+      full_name: user?.full_name || profile?.full_name || "",
+      email: user?.email || profile?.email || "",
+      phone: profile?.phone || "+91-9876543210",
+      college: "University Institute of Technology",
+      degree: "B.Tech / B.E.",
+      department: profile?.department || "Computer Science & Engineering",
+      current_year: yr,
+      graduation_year: 2026 + Math.max(0, 4 - yr),
+      technical_skills: existingSkills,
+      programming_languages: existingSkills.slice(0, 3).join(", ") || "Python, SQL",
+      frameworks: "FastAPI, React",
+      tools: "Git, Docker, VS Code",
+      soft_skills: "Problem Solving, Team Collaboration, Technical Communication",
+      cgpa: "8.8",
+      relevant_coursework: "Data Structures & Algorithms, DBMS, Operating Systems, Machine Learning",
+      previous_internship_experience: "",
+      work_experience: "",
+      project_title: `${opp.title || "Engineering"} Capstone Prototype`,
+      project_description: `Designed and implemented an end-to-end prototype aligned with ${opp.title || "software engineering"} workflows.`,
+      project_technologies: (opp.required_skills || existingSkills).slice(0, 4).join(", "),
+      resume_url: "",
+      certifications: "",
+      github_url: "",
+      linkedin_url: "",
+      portfolio_url: "",
+      additional_info: "",
+    });
+    setShowApplyModal(true);
+  };
+
+  const handleApplyInternship = async (internshipId: number) => {
+    const opp = openInternships.find((o: any) => o.id === internshipId);
+    if (opp) {
+      openApplyModal(opp);
+      return;
+    }
+    try {
+      setApplyingId(internshipId);
+      setError(null);
+      setApplicationSuccessMsg(null);
+      await api.applyInternship(internshipId);
+      setApplicationSuccessMsg("Application submitted successfully! Your application is under administrative review.");
+      const [apps, opens, tsk, notifs] = await Promise.all([
+        api.getMyApplications(),
+        api.listInternships({ status: "AVAILABLE" }),
+        api.getMyTasks(),
+        api.getNotifications(),
+      ]);
+      setApplications(apps || []);
+      setOpenInternships(opens || []);
+      setTasks(tsk || []);
+      setStudentNotifications(notifs || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to submit application");
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
+  const handleAddAppFormSkill = (skillToAdd?: string) => {
+    const raw = (skillToAdd ?? appSkillInput).trim();
+    if (!raw) return;
+    const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const currentLower = new Set(appForm.technical_skills.map((s) => s.toLowerCase()));
+    const added: string[] = [];
+    for (const p of parts) {
+      if (!currentLower.has(p.toLowerCase())) {
+        currentLower.add(p.toLowerCase());
+        added.push(p);
+      }
+    }
+    if (added.length > 0) {
+      setAppForm((prev) => ({
+        ...prev,
+        technical_skills: [...prev.technical_skills, ...added],
+      }));
+    }
+    if (!skillToAdd) setAppSkillInput("");
+  };
+
+  const handleRemoveAppFormSkill = (skillToRemove: string) => {
+    setAppForm((prev) => ({
+      ...prev,
+      technical_skills: prev.technical_skills.filter((s) => s !== skillToRemove),
+    }));
+  };
+
+  const splitCsvSkills = (val: string): string[] =>
+    val
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+  const getCombinedAppSkills = (): string[] => {
+    const all = [
+      ...appForm.technical_skills,
+      ...splitCsvSkills(appForm.programming_languages),
+      ...splitCsvSkills(appForm.frameworks),
+      ...splitCsvSkills(appForm.tools),
+    ];
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const s of all) {
+      const k = s.toLowerCase();
+      if (k && !seen.has(k)) {
+        seen.add(k);
+        out.push(s);
+      }
+    }
+    return out;
+  };
+
+  const submitInternshipApplication = async () => {
+    if (!applyingInternship) return;
+    setAppFormError(null);
+
+    if (!appForm.full_name.trim() || !appForm.email.trim() || !appForm.phone.trim() || !appForm.department.trim()) {
+      setAppFormError("Please complete all required student basic details (Name, Email, Phone, Department).");
+      return;
+    }
+    const combinedSkills = getCombinedAppSkills();
+    if (combinedSkills.length === 0) {
+      setAppFormError("Please provide at least one technical skill or programming language.");
+      return;
+    }
+
+    try {
+      setApplyingId(applyingInternship.id);
+      setError(null);
+      setApplicationSuccessMsg(null);
+
+      const payload = {
+        full_name: appForm.full_name.trim(),
+        email: appForm.email.trim(),
+        phone: appForm.phone.trim(),
+        college: appForm.college.trim(),
+        degree: appForm.degree.trim(),
+        department: appForm.department.trim(),
+        current_year: Number(appForm.current_year) || 3,
+        graduation_year: Number(appForm.graduation_year) || 2027,
+        technical_skills: appForm.technical_skills,
+        programming_languages: splitCsvSkills(appForm.programming_languages),
+        frameworks: splitCsvSkills(appForm.frameworks),
+        tools: splitCsvSkills(appForm.tools),
+        soft_skills: splitCsvSkills(appForm.soft_skills),
+        skills: combinedSkills,
+        cgpa: appForm.cgpa.trim(),
+        relevant_coursework: appForm.relevant_coursework.trim(),
+        previous_internship_experience: appForm.previous_internship_experience.trim() || undefined,
+        work_experience: appForm.work_experience.trim() || undefined,
+        project_title: appForm.project_title.trim() || undefined,
+        project_description: appForm.project_description.trim() || undefined,
+        project_technologies: appForm.project_technologies.trim() || undefined,
+        resume_url: appForm.resume_url.trim() || undefined,
+        certifications: appForm.certifications.trim() || undefined,
+        github_url: appForm.github_url.trim() || undefined,
+        linkedin_url: appForm.linkedin_url.trim() || undefined,
+        portfolio_url: appForm.portfolio_url.trim() || undefined,
+        additional_info: appForm.additional_info.trim() || undefined,
+      };
+
+      const createdApp = await api.applyInternship(applyingInternship.id, payload);
+
+      setShowApplyModal(false);
+      setIsReviewingAppForm(false);
+      setSelectedGapInternship(applyingInternship);
+      setGapResult({
+        match_percentage: createdApp.skill_match_percentage ?? 0,
+        matched_skills: createdApp.matched_skills || [],
+        missing_skills: createdApp.missing_skills || [],
+        recommendation: createdApp.skill_recommendation || "Review your matched and missing skills.",
+      });
+      setApplicationSuccessMsg(
+        `Application submitted for ${applyingInternship.title} at ${
+          applyingInternship.company_name || "Partner Company"
+        }! Skill Match: ${createdApp.skill_match_percentage ?? 0}% • ${
+          createdApp.tasks_total || 0
+        } internship-specific tasks assigned.`
+      );
+
+      const [apps, opens, prof, tsk, att, notifs] = await Promise.all([
+        api.getMyApplications(),
+        api.listInternships({ status: "AVAILABLE" }),
+        api.getMyProfile(),
+        api.getMyTasks(),
+        api.getMyAttention(),
+        api.getNotifications(),
+      ]);
+      setApplications(apps || []);
+      setOpenInternships(opens || []);
+      if (prof) setProfile(prof);
+      setTasks(tsk || []);
+      if (att) setAttention(att);
+      setStudentNotifications(notifs || []);
+    } catch (err: any) {
+      setAppFormError(err.message || "Failed to submit internship application");
+    } finally {
+      setApplyingId(null);
+    }
+  };
+
   /* ── Fully Dynamic Computed Stats (Zero Hardcoding) ── */
   const studentName = user?.full_name || profile?.full_name || "Student";
-  const studentRoll = profile?.roll_number || (user?.user_id ? `#STU-${user.user_id}` : "#STU-8821");
+  const studentRoll = profile?.roll_number || (user?.user_id ? `#STU-${user.user_id}` : "N/A");
   const studentDept = profile?.department || "Computer Science & Engineering";
   const studentYear = profile?.academic_year ? `${profile.academic_year} Year` : "Academic Term 2026";
-  const companyName = internship?.company_name || internship?.company?.name || "Placement Pending Allocation";
-  const roleTitle = internship?.title || "Internship Candidate";
-  const internshipStatus = internship?.status || "PENDING";
-  const supervisorName = internship?.mentor_name || internship?.mentor?.full_name || "Assigned Faculty Supervisor";
+  const companyName = internship?.company_name || internship?.company?.name || profile?.company_name || "Placement Pending Allocation";
+  const roleTitle = internship?.title || profile?.internship_title || "Internship Candidate";
+  const internshipStatus = internship?.status || profile?.internship_status || "PENDING";
+  const assignedMentorName = profile?.mentor_name || internship?.mentor_name || internship?.mentor?.full_name || null;
+  const assignedMentorEmail = profile?.mentor_email || internship?.mentor?.email || null;
+  const assignedMentorDept = profile?.mentor_department || studentDept;
+  const assignedMentorDesignation = profile?.mentor_designation || "Faculty Supervisor";
+  const supervisorName = assignedMentorName || "No mentor assigned yet.";
 
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((t) => t.is_completed).length;
@@ -417,15 +935,16 @@ export default function StudentPortal() {
   const currentWeek = calculateCurrentWeek();
 
   const reportPct = Math.min(100, Math.round((reports.length / Math.max(1, currentWeek)) * 100));
-  const fallbackScore = Math.round((taskPct * 0.5) + (reportPct * 0.5));
+  const isEarlyOnboarding = currentWeek <= 1 && reports.length === 0;
+  const fallbackScore = isEarlyOnboarding ? 95 : Math.round((taskPct * 0.5) + (reportPct * 0.5));
   const fallbackStatus = fallbackScore >= 75 ? "ON_TRACK" : fallbackScore >= 50 ? "MONITOR" : "NEEDS_ATTENTION";
 
   const attentionScore = Math.round(attention?.attention_score ?? fallbackScore);
   const attentionStatus = attention?.attention_status || fallbackStatus;
   const factors = attention?.factors || {
-    progress_consistency: reportPct,
-    task_completion: taskPct,
-    report_submission: reportPct,
+    progress_consistency: isEarlyOnboarding ? 100 : reportPct,
+    task_completion: isEarlyOnboarding && completedTasks === 0 ? 100 : taskPct,
+    report_submission: isEarlyOnboarding ? 100 : reportPct,
     mentor_feedback: 75,
   };
   const reasons: string[] =
@@ -445,6 +964,52 @@ export default function StudentPortal() {
 
   const sortedReports = [...reports].sort((a, b) => b.week_number - a.week_number);
   const latestFeedback = sortedReports.find((r) => r.mentor_feedback);
+
+  const handleExportStudentPdf = () => {
+    downloadRealPdf({
+      filename: "Student_Progress_Report.pdf",
+      title: `EduIntern - Student Progress Report: ${studentName}`,
+      subtitle: `Enrollment: ${studentRoll} | Department: ${studentDept}`,
+      metadata: {
+        "Student Name": studentName,
+        "Email": user?.email || profile?.email || "",
+        "Company": companyName,
+        "Role": roleTitle,
+        "Assigned Mentor": supervisorName,
+        "Tasks Completed": `${completedTasks}/${totalTasks} (${taskPct}%)`,
+        "Total Hours Logged": `${totalHoursLogged} hrs`,
+        "Progress Score": `${attentionScore}% (${attentionStatus})`,
+      },
+      sections: [
+        {
+          heading: "1. Weekly Logbooks & Faculty Evaluations",
+          lines:
+            sortedReports.length > 0
+              ? sortedReports.map(
+                  (r: any) =>
+                    `Week ${r.week_number} [${r.status}] (${r.hours_spent || 40} hrs) | Score: ${
+                      r.mentor_score ?? "Pending"
+                    } | ${r.achievements || r.summary || ""} ${
+                      r.mentor_feedback ? `| Mentor Feedback: ${r.mentor_feedback}` : ""
+                    }`
+                )
+              : ["No weekly progress reports submitted yet."],
+        },
+        {
+          heading: "2. Curriculum Milestones & Tasks",
+          lines:
+            tasks.length > 0
+              ? tasks.map(
+                  (t: any) =>
+                    `[${t.is_completed ? "COMPLETED" : "PENDING"}] ${t.title} - ${
+                      t.description || ""
+                    }`
+                )
+              : ["No milestone tasks assigned yet."],
+        },
+      ],
+    });
+  };
 
   if (authLoading || loading) {
     return (
@@ -539,6 +1104,14 @@ export default function StudentPortal() {
                 >
                   <TrendingUp size={14} />
                   Skill Competency
+                </button>
+                <button
+                  onClick={handleExportStudentPdf}
+                  className="stitch-pill-btn py-2 px-3.5 text-xs inline-flex items-center gap-1.5 bg-white font-bold"
+                  title="Download Student Progress Report PDF"
+                >
+                  <Download size={14} />
+                  Export PDF
                 </button>
               </div>
             </GlassCard>
@@ -711,6 +1284,110 @@ export default function StudentPortal() {
               onActionClick={() => setActiveTab("feedback")}
               actionLabel="Detailed 4-Factor Breakdown"
             />
+          </div>
+
+          {/* ─────────────────────────────────── */}
+          {/* 3B. ASSIGNED MENTOR & NOTIFICATIONS */}
+          {/* ─────────────────────────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Assigned Mentor Card (6 cols) */}
+            <GlassCard className="lg:col-span-6 p-6 flex flex-col justify-between">
+              <div>
+                <SectionHeader
+                  title="Assigned Mentor"
+                  subtitle="Faculty supervision assigned by university administration"
+                  icon={<UserCheck size={16} className="text-blue-600" />}
+                />
+                {assignedMentorName ? (
+                  <div className="mt-4 p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-11 h-11 rounded-full bg-blue-600 text-white font-extrabold flex items-center justify-center text-sm shrink-0">
+                          {assignedMentorName
+                            .split(" ")
+                            .map((w: string) => w[0])
+                            .slice(0, 2)
+                            .join("")}
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-sm font-extrabold text-slate-900 truncate">
+                            {assignedMentorName}
+                          </h4>
+                          <p className="text-xs text-slate-500 truncate">
+                            {assignedMentorDesignation} • {assignedMentorDept}
+                          </p>
+                          {assignedMentorEmail && (
+                            <p className="text-[11px] text-blue-600 font-medium truncate mt-0.5">
+                              {assignedMentorEmail}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/70 shrink-0">
+                        Assigned
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-200/60">
+                      <button
+                        onClick={() => setActiveTab("messages")}
+                        className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-2xs transition-all inline-flex items-center gap-1.5"
+                      >
+                        <MessageSquare size={13} />
+                        <span>Message Mentor</span>
+                      </button>
+                      {assignedMentorEmail && (
+                        <a
+                          href={`mailto:${assignedMentorEmail}`}
+                          className="stitch-pill-btn py-2 px-3 text-xs inline-flex items-center gap-1.5"
+                        >
+                          <Mail size={13} />
+                          <span>Email Faculty</span>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 p-6 rounded-xl bg-slate-50 border border-slate-200/80 text-center">
+                    <p className="text-xs font-bold text-slate-700">No mentor assigned yet.</p>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Once the university administrator assigns a faculty mentor to your profile, their contact details and direct messaging channel will appear here.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </GlassCard>
+
+            {/* Student Notifications & Reminders Card (6 cols) */}
+            <GlassCard className="lg:col-span-6 p-6">
+              <SectionHeader
+                title="Notifications &amp; Reminders"
+                subtitle="Mentor assignment updates, pending work alerts, and report reminders"
+                icon={<Bell size={16} className="text-indigo-600" />}
+              />
+              <div className="mt-4 space-y-2.5 max-h-56 overflow-y-auto pr-1">
+                {studentNotifications.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                    No notifications at this time.
+                  </div>
+                ) : (
+                  studentNotifications.slice(0, 6).map((notif: any) => (
+                    <div
+                      key={notif.id}
+                      className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/70 text-xs"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <strong className="font-bold text-slate-900">{notif.title}</strong>
+                        <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">
+                          {notif.notification_type}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">{notif.message}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </GlassCard>
           </div>
 
           {/* ─────────────────────────────────── */}
@@ -1072,6 +1749,121 @@ export default function StudentPortal() {
               </span>
             </div>
           </GlassCard>
+
+          {/* ── 6. Available Published Internships & Apply Now (Overview Quick Access) ── */}
+          <GlassCard className="p-6 border-slate-200/80">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <SectionHeader
+                title="Available Internships — Published Opportunities"
+                subtitle="Browse real corporate internships published by the Admin and submit your application directly."
+                badge={`${openInternships.length} Open Roles`}
+              />
+              <button
+                onClick={() => setActiveTab("internships")}
+                className="stitch-pill-btn py-1.5 px-3 text-xs font-bold text-blue-700 bg-blue-50 border-blue-200 shrink-0 self-start sm:self-auto"
+              >
+                <span>View All Internships &amp; My Applications ({applications.length})</span>
+              </button>
+            </div>
+
+            {applicationSuccessMsg && (
+              <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{applicationSuccessMsg}</span>
+              </div>
+            )}
+
+            <div className="space-y-3">
+              {openInternships.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                  No open internship opportunities available at this time.
+                </div>
+              ) : (
+                openInternships.slice(0, 5).map((opp: any) => {
+                  const existingApp = applications.find((a: any) => a.internship_id === opp.id);
+                  const isRealId = typeof opp.id === "number";
+
+                  return (
+                    <div
+                      key={opp.id}
+                      className="p-4 rounded-xl border border-slate-200/80 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-blue-300 transition-all"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <strong className="text-sm font-bold text-slate-900">{opp.title}</strong>
+                          <span className="text-xs font-semibold text-blue-700">
+                            • {opp.company_name || opp.company?.name || "Corporate Partner"}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            PUBLISHED
+                          </span>
+                        </div>
+                        {opp.description && (
+                          <p className="text-xs text-slate-600 mt-1 max-w-2xl line-clamp-2">
+                            {opp.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1.5 flex-wrap">
+                          <span>📍 {opp.location || (opp.is_remote ? "Remote" : "On-site")}</span>
+                          <span>• ⏱ {opp.duration_weeks || 8} Weeks</span>
+                          {opp.stipend ? <span>• 💰 ${opp.stipend}/mo</span> : null}
+                          {opp.application_deadline ? (
+                            <span>
+                              • 📅 Apply by {new Date(opp.application_deadline).toLocaleDateString()}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {(opp.required_skills || []).map((sk: string) => (
+                            <span
+                              key={sk}
+                              className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium"
+                            >
+                              {sk}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 flex-wrap">
+                        <button
+                          onClick={() => {
+                            handleAnalyzeGap(opp);
+                            setActiveTab("feedback");
+                          }}
+                          className="btn-secondary text-xs"
+                        >
+                          Analyze Skill Match
+                        </button>
+
+                        {existingApp ? (
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                              existingApp.status === "APPROVED"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : existingApp.status === "REJECTED"
+                                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}
+                          >
+                            Applied ({existingApp.status})
+                          </span>
+                        ) : isRealId ? (
+                          <button
+                            onClick={() => handleApplyInternship(opp.id)}
+                            disabled={applyingId === opp.id}
+                            className="btn-primary text-xs"
+                          >
+                            {applyingId === opp.id ? "Applying..." : "Apply Now"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </GlassCard>
         </div>
       )}
 
@@ -1409,18 +2201,27 @@ export default function StudentPortal() {
                       />
                     </div>
 
-                    {/* Optional Evidence Link */}
+                    {/* Required Evidence Link */}
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
-                        Optional Evidence / Artifact Reference URL
+                        Required Evidence / Artifact Reference URL <span className="text-rose-500">*</span>
                       </label>
                       <input
-                        type="url"
+                        type="text"
+                        required
                         value={evidenceUrl}
-                        onChange={(e) => setEvidenceUrl(e.target.value)}
+                        onChange={(e) => {
+                          setEvidenceUrl(e.target.value);
+                          setFormErrors((prev) => ({ ...prev, evidenceUrl: "" }));
+                        }}
                         placeholder="https://github.com/organization/repo/pull/42 or Google Drive / Figma link"
-                        className="sims-input text-xs"
+                        className={`sims-input text-xs ${
+                          formErrors.evidenceUrl ? "border-rose-400 bg-rose-50/20" : ""
+                        }`}
                       />
+                      {formErrors.evidenceUrl && (
+                        <p className="text-[11px] text-rose-600 mt-1 font-semibold">{formErrors.evidenceUrl}</p>
+                      )}
                     </div>
 
                     {/* Submit Actions */}
@@ -1497,7 +2298,7 @@ export default function StudentPortal() {
                         Recent Score
                       </span>
                       <strong className="text-sm font-black text-slate-900">
-                        {latestFeedback?.mentor_score ? `${latestFeedback.mentor_score} / 100` : "92.0 / 100"}
+                        {latestFeedback?.mentor_score ? `${latestFeedback.mentor_score} / 100` : "Pending"}
                       </strong>
                     </div>
                     <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/60">
@@ -1573,6 +2374,7 @@ export default function StudentPortal() {
                 <div className="space-y-4">
                   {sortedReports.map((report) => {
                     const parsed = parseReportAchievements(report.achievements);
+                    const evLink = report.evidence_url || parsed.evidence;
                     return (
                       <div
                         key={report.id}
@@ -1655,18 +2457,18 @@ export default function StudentPortal() {
                             </div>
                           )}
 
-                          {parsed.evidence && (
+                          {evLink && (
                             <div>
                               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
                                 Corroborating Evidence
                               </span>
                               <a
-                                href={parsed.evidence}
+                                href={evLink}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-blue-600 hover:underline inline-flex items-center gap-1 font-semibold"
                               >
-                                <span>{parsed.evidence}</span>
+                                <span>{evLink}</span>
                                 <ExternalLink size={12} />
                               </a>
                             </div>
@@ -1765,6 +2567,11 @@ export default function StudentPortal() {
             title="Progress Analysis"
             subtitle="Deterministic 4-Factor Monitoring & Attention Evaluation"
             showBreakdown={true}
+            risk_probability={attention?.risk_probability}
+            risk_label={attention?.risk_label}
+            model_version={attention?.model_version}
+            model_available={attention?.model_available}
+            top_risk_factors={attention?.top_risk_factors}
           />
 
           {/* Section 2: Skill Gap Analysis */}
@@ -1909,6 +2716,135 @@ export default function StudentPortal() {
               </div>
             )}
           </GlassCard>
+
+          {/* Section 3: FEATURE 3 — SKILL DEPENDENCY GRAPH & PREREQUISITE LEARNING PATH */}
+          <GlassCard className="p-6 border-indigo-200/80">
+            <SectionHeader
+              title="Skill Dependency Graph &amp; Prerequisite Learning Roadmap"
+              subtitle="Database-backed prerequisite graph showing foundational skills required before advanced internship competencies."
+              badge="Prerequisite Graph"
+            />
+
+            {loadingDepGraph ? (
+              <div className="p-6 text-center text-xs text-slate-500 font-semibold animate-pulse">
+                Building prerequisite skill dependency graph...
+              </div>
+            ) : depGraph ? (
+              <div className="space-y-5 mt-3">
+                {/* Recommended Learning Order Banner */}
+                <div className="p-4 rounded-xl bg-indigo-50/70 border border-indigo-200">
+                  <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-indigo-900 flex items-center gap-1.5">
+                      <TrendingUp size={15} className="text-indigo-600" />
+                      <span>Recommended Prerequisite Learning Order</span>
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white text-indigo-700 border border-indigo-200">
+                      {depGraph.recommended_learning_order?.length || 0} Step(s) to Full Readiness
+                    </span>
+                  </div>
+                  {depGraph.recommended_learning_order && depGraph.recommended_learning_order.length > 0 ? (
+                    <div className="flex items-center flex-wrap gap-2 mt-2">
+                      {depGraph.recommended_learning_order.map((sk: string, idx: number) => (
+                        <React.Fragment key={sk}>
+                          <span className="px-3 py-1 rounded-lg text-xs font-bold bg-white text-indigo-900 border border-indigo-300 shadow-2xs">
+                            {idx + 1}. Learn {sk}
+                          </span>
+                          {idx < depGraph.recommended_learning_order.length - 1 && (
+                            <ArrowRight size={14} className="text-indigo-500 shrink-0" />
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-emerald-700 font-semibold">
+                      ✓ You already possess all foundational prerequisites and target skills for this role!
+                    </p>
+                  )}
+                  {depGraph.recommendation && (
+                    <p className="text-xs text-indigo-900 mt-2.5 font-medium">
+                      💡 {depGraph.recommendation}
+                    </p>
+                  )}
+                </div>
+
+                {/* Prerequisite Chains Visualization */}
+                <div>
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 mb-3">
+                    Target Competency Dependency Chains (Foundational → Advanced)
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {(depGraph.dependency_chains || []).map((item: any) => {
+                      const chain: string[] = Array.isArray(item.chain) ? item.chain : [item.target_skill];
+                      const studentLower = new Set(
+                        (depGraph.student_skills || profile?.skills || []).map((s: string) => s.toLowerCase())
+                      );
+                      return (
+                        <div
+                          key={item.target_skill}
+                          className="p-4 rounded-xl border border-slate-200/80 bg-white space-y-2.5 shadow-2xs"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <strong className="text-xs font-extrabold text-slate-900">
+                              Target: {item.target_skill}
+                            </strong>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                item.student_has_target
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-amber-50 text-amber-800 border-amber-200"
+                              }`}
+                            >
+                              {item.student_has_target ? "✓ Acquired" : "⚠ Missing Target"}
+                            </span>
+                          </div>
+
+                          {/* Visual Chain Nodes */}
+                          <div className="flex items-center flex-wrap gap-1.5 pt-1">
+                            {chain.map((nodeSkill: string, idx: number) => {
+                              const hasNode = studentLower.has(nodeSkill.toLowerCase());
+                              return (
+                                <React.Fragment key={`${item.target_skill}-${nodeSkill}-${idx}`}>
+                                  <span
+                                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                                      hasNode
+                                        ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                        : "bg-amber-50 text-amber-900 border-amber-300"
+                                    }`}
+                                  >
+                                    {hasNode ? `✓ ${nodeSkill}` : `⚠ ${nodeSkill}`}
+                                  </span>
+                                  {idx < chain.length - 1 && (
+                                    <ArrowRight size={13} className="text-slate-400 shrink-0" />
+                                  )}
+                                </React.Fragment>
+                              );
+                            })}
+                          </div>
+
+                          <p className="text-[11px] text-slate-600">
+                            {item.next_skill_to_learn ? (
+                              <>
+                                Next Prerequisite to Learn First:{" "}
+                                <strong className="text-indigo-700">{item.next_skill_to_learn}</strong>
+                              </>
+                            ) : (
+                              <span className="text-emerald-700 font-medium">
+                                All prerequisites satisfied for {item.target_skill}.
+                              </span>
+                            )}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                Select any internship opportunity above to view its interactive Skill Dependency Graph.
+              </div>
+            )}
+          </GlassCard>
         </div>
       )}
 
@@ -1954,6 +2890,415 @@ export default function StudentPortal() {
               </button>
             </div>
           </div>
+
+          {/* 0A. Partner Employer Listings & Published Opportunities (Domain-Based Search & Apply Now) */}
+          <GlassCard className="p-6 border-blue-200/80">
+            <SectionHeader
+              title="Partner Employer Opportunities &amp; Domain-Based Search"
+              subtitle="Search and filter accredited industry openings by required domain, title, or company and apply directly."
+              badge={`${openInternships.length} Matching Internships`}
+              className="mb-4"
+            />
+
+            {/* FEATURE 1: Domain-Based Internship Search & Filter Bar */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 mb-4 space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                <div className="md:col-span-5">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Search by Title, Company, or Domain
+                  </label>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSearchQuery(val);
+                      handleSearchInternships(selectedDomain, val);
+                    }}
+                    placeholder="Search e.g. Machine Learning, Cyber Security, NexusAI..."
+                    className="sims-input text-xs w-full"
+                  />
+                </div>
+                <div className="md:col-span-4">
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    Filter by Required Domain
+                  </label>
+                  <select
+                    value={selectedDomain}
+                    onChange={(e) => {
+                      const dom = e.target.value;
+                      setSelectedDomain(dom);
+                      handleSearchInternships(dom, searchQuery);
+                    }}
+                    className="sims-select text-xs w-full"
+                  >
+                    <option value="ALL">All Domains ({domains.length || 14} Categories)</option>
+                    {(domains.length > 0
+                      ? domains
+                      : [
+                          "Software Development",
+                          "Web Development",
+                          "Data Science",
+                          "Artificial Intelligence",
+                          "Machine Learning",
+                          "Cyber Security",
+                          "Cloud Computing",
+                          "DevOps",
+                          "Data Analytics",
+                          "IoT",
+                          "Embedded Systems",
+                          "Blockchain",
+                          "UI/UX",
+                          "Networking",
+                        ]
+                    ).map((dom) => (
+                      <option key={dom} value={dom}>
+                        {dom}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-3 flex items-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSearchInternships(selectedDomain, searchQuery)}
+                    disabled={searchingInternships}
+                    className="btn-primary text-xs flex-1"
+                  >
+                    {searchingInternships ? "Searching..." : "Search"}
+                  </button>
+                  {(selectedDomain !== "ALL" || searchQuery.trim() !== "") && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedDomain("ALL");
+                        setSearchQuery("");
+                        handleSearchInternships("ALL", "");
+                      }}
+                      className="btn-secondary text-xs shrink-0"
+                    >
+                      Clear Filters
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {applicationSuccessMsg && (
+              <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{applicationSuccessMsg}</span>
+              </div>
+            )}
+            <div className="space-y-3">
+              {openInternships.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                  No open internship opportunities match the selected domain or search criteria.
+                </div>
+              ) : (
+                openInternships.map((opp: any) => {
+                  const existingApp = applications.find((a: any) => a.internship_id === opp.id);
+                  const isRealId = typeof opp.id === "number";
+
+                  return (
+                    <div
+                      key={opp.id}
+                      className="p-4 rounded-xl border border-slate-200/80 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-blue-300 transition-all"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <strong className="text-sm font-bold text-slate-900">{opp.title}</strong>
+                          <span className="text-xs font-semibold text-blue-700">
+                            • {opp.company_name || opp.company?.name || "Corporate Partner"}
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            Domain: {opp.domain || "Software Development"}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            {opp.status || "AVAILABLE"}
+                          </span>
+                        </div>
+                        {opp.description && (
+                          <p className="text-xs text-slate-600 mt-1 max-w-2xl">
+                            {opp.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1.5 flex-wrap">
+                          <span>📍 {opp.location || (opp.is_remote ? "Remote" : "On-site")}</span>
+                          <span>• ⏱ {opp.duration_weeks || 8} Weeks</span>
+                          {opp.stipend ? <span>• 💰 ${opp.stipend}/mo</span> : null}
+                          {opp.application_deadline ? (
+                            <span>
+                              • 📅 Apply by {new Date(opp.application_deadline).toLocaleDateString()}
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {(opp.required_skills || []).map((sk: string) => (
+                            <span
+                              key={sk}
+                              className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium"
+                            >
+                              {sk}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 self-end sm:self-auto shrink-0 flex-wrap">
+                        <button
+                          onClick={() => {
+                            handleAnalyzeGap(opp);
+                            setActiveTab("feedback");
+                          }}
+                          className="btn-secondary text-xs"
+                        >
+                          Analyze Skill Match &amp; Graph
+                        </button>
+
+                        {existingApp ? (
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                              existingApp.status === "APPROVED"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : existingApp.status === "REJECTED"
+                                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}
+                          >
+                            Applied ({existingApp.status})
+                          </span>
+                        ) : isRealId ? (
+                          <button
+                            onClick={() => handleApplyInternship(opp.id)}
+                            disabled={applyingId === opp.id}
+                            className="btn-primary text-xs"
+                          >
+                            {applyingId === opp.id ? "Applying..." : "Apply Now"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </GlassCard>
+
+          {/* 0B. My Submitted Applications */}
+          <GlassCard className="p-6">
+            <SectionHeader
+              title="My Submitted Applications"
+              subtitle="Track the real-time review status, skill match analysis, and internship-specific tasks of your applications."
+              badge={`${applications.length} Submitted`}
+              className="mb-4"
+            />
+            {applications.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl">
+                You have not submitted any internship applications yet. Click &quot;Apply Now&quot; on any published opportunity above to apply.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {applications.map((app: any) => {
+                  const matchPct = Math.round(app.skill_match_percentage ?? 0);
+                  const matchedList: string[] = Array.isArray(app.matched_skills) ? app.matched_skills : [];
+                  const missingList: string[] = Array.isArray(app.missing_skills) ? app.missing_skills : [];
+                  const appTasks: any[] = Array.isArray(app.tasks) ? app.tasks : [];
+
+                  return (
+                    <div
+                      key={app.id}
+                      className="p-5 rounded-xl border border-slate-200/80 bg-white space-y-4 shadow-2xs"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <strong className="text-sm font-bold text-slate-900">{app.internship_title}</strong>
+                            <span className="text-xs font-semibold text-blue-700">• {app.company_name}</span>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[11px] font-bold border ${
+                                matchPct >= 80
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : matchPct >= 50
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              }`}
+                            >
+                              Skill Match: {matchPct}%
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-slate-500 mt-1 flex-wrap">
+                            <span>
+                              Applied on{" "}
+                              {app.applied_at
+                                ? new Date(app.applied_at).toLocaleDateString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })
+                                : "Recently"}
+                            </span>
+                            {app.mentor_name && (
+                              <span>
+                                • Mentor: <strong className="text-slate-700">{app.mentor_name}</strong>
+                                {app.mentor_code ? ` (${app.mentor_code})` : ""}
+                              </span>
+                            )}
+                            <span>
+                              • Tasks: <strong className="text-slate-700">{app.tasks_completed ?? 0}/{app.tasks_total ?? appTasks.length} Completed</strong>
+                            </span>
+                          </div>
+                          {app.review_notes && (
+                            <p className="text-xs text-slate-600 mt-1.5 italic">
+                              Admin/Mentor Note: {app.review_notes}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 self-start shrink-0">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                              app.status === "APPROVED" || app.status === "SELECTED"
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : app.status === "REJECTED"
+                                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                                : app.status === "SHORTLISTED" || app.status === "UNDER_REVIEW"
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : "bg-amber-50 text-amber-700 border border-amber-200"
+                            }`}
+                          >
+                            {app.status === "APPROVED"
+                              ? "Approved & Allocated"
+                              : app.status === "SELECTED"
+                              ? "Selected"
+                              : app.status === "SHORTLISTED"
+                              ? "Shortlisted"
+                              : app.status === "UNDER_REVIEW"
+                              ? "Under Review"
+                              : app.status === "REJECTED"
+                              ? "Rejected"
+                              : "Pending Administrative Review"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Skill Match & Skill Gap Breakdown */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                        <div className="p-3 rounded-lg bg-emerald-50/50 border border-emerald-100">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 mb-1.5">
+                            ✓ Matched Skills ({matchedList.length})
+                          </p>
+                          {matchedList.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5">
+                              {matchedList.map((sk) => (
+                                <span
+                                  key={sk}
+                                  className="px-2 py-0.5 rounded-md bg-white text-emerald-700 border border-emerald-200 text-[11px] font-semibold"
+                                >
+                                  ✓ {sk}
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-slate-500">No direct skill matches recorded yet.</p>
+                          )}
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-amber-50/50 border border-amber-100">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-800 mb-1.5">
+                            ⚠ Missing Skills / Skill Gap ({missingList.length})
+                          </p>
+                          {missingList.length > 0 ? (
+                            <div className="space-y-1.5">
+                              <div className="flex flex-wrap gap-1.5">
+                                {missingList.map((sk) => (
+                                  <span
+                                    key={sk}
+                                    className="px-2 py-0.5 rounded-md bg-white text-amber-800 border border-amber-200 text-[11px] font-semibold"
+                                  >
+                                    ⚠ {sk}
+                                  </span>
+                                ))}
+                              </div>
+                              {app.skill_recommendation && (
+                                <p className="text-[11px] text-amber-900 font-medium">
+                                  💡 Recommendation: {app.skill_recommendation}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-emerald-700 font-medium">
+                              100% Skill Alignment — No missing required skills!
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Internship-Specific Assigned Tasks */}
+                      {appTasks.length > 0 && (
+                        <div className="pt-3 border-t border-slate-100">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                              Assigned Tasks for {app.internship_title} ({app.company_name})
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => setActiveTab("milestones")}
+                              className="text-[11px] font-bold text-blue-600 hover:underline"
+                            >
+                              Open Full Milestones View →
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {appTasks.map((t: any) => (
+                              <div
+                                key={t.id}
+                                onClick={() => handleToggleTask(t.id)}
+                                className={`p-2.5 rounded-lg border text-xs flex items-start gap-2.5 cursor-pointer transition-all ${
+                                  t.is_completed
+                                    ? "bg-emerald-50/40 border-emerald-200 text-slate-600"
+                                    : "bg-slate-50/70 border-slate-200/80 hover:border-blue-300 text-slate-800"
+                                }`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(t.is_completed)}
+                                  onChange={() => {}}
+                                  className="mt-0.5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className={`font-semibold truncate ${t.is_completed ? "line-through text-slate-500" : ""}`}>
+                                      {t.title}
+                                    </span>
+                                    <span
+                                      className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase shrink-0 ${
+                                        t.is_completed
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : "bg-blue-100 text-blue-700"
+                                      }`}
+                                    >
+                                      {t.is_completed ? "COMPLETED" : t.priority || "MEDIUM"}
+                                    </span>
+                                  </div>
+                                  {t.description && (
+                                    <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{t.description}</p>
+                                  )}
+                                  {t.due_date && (
+                                    <p className="text-[10px] text-slate-400 mt-0.5">
+                                      Due: {new Date(t.due_date).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </GlassCard>
 
           {/* 1. Organization & Role Hero Card */}
           <GlassCard className="p-6 sm:p-7">
@@ -2310,62 +3655,300 @@ export default function StudentPortal() {
             </div>
           </GlassCard>
 
-          {/* 5. Partner Employer Listings & Opportunities */}
-          <GlassCard className="p-6">
+          {/* 5. FEATURE 2 — KNOWLEDGE HANDOFF DOCUMENT */}
+          <GlassCard className="p-6 border-indigo-200/80">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <SectionHeader
+                title="Knowledge Handoff &amp; Engineering Transition Document"
+                subtitle="Document completed work, architecture notes, challenges, solutions, and recommendations for your mentor and future interns."
+                badge={`${handoffs.length} Handoff Document(s)`}
+              />
+              <button
+                type="button"
+                onClick={() => handleOpenHandoffModal(handoffs[0])}
+                className="btn-primary text-xs shrink-0 self-start sm:self-auto"
+              >
+                {handoffs.length > 0 ? "Edit / Update Knowledge Handoff" : "+ Create Knowledge Handoff"}
+              </button>
+            </div>
+
+            {handoffMsg && (
+              <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                <span>{handoffMsg}</span>
+              </div>
+            )}
+
+            {handoffs.length === 0 ? (
+              <div className="p-6 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-200/70">
+                No Knowledge Handoff document submitted yet. Click &quot;+ Create Knowledge Handoff&quot; to record your internship engineering handoff.
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {handoffs.map((h: any) => (
+                  <div key={h.id} className="p-5 rounded-xl border border-slate-200/80 bg-white space-y-3 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-sm font-extrabold text-slate-900">{h.title}</h4>
+                          <span
+                            className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                              h.status === "APPROVED"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : h.status === "CHANGES_REQUESTED"
+                                ? "bg-rose-50 text-rose-700 border-rose-200"
+                                : h.status === "SUBMITTED"
+                                ? "bg-blue-50 text-blue-700 border-blue-200"
+                                : "bg-slate-100 text-slate-700 border-slate-200"
+                            }`}
+                          >
+                            {h.status}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          {h.internship_title} • {h.company_name} ({h.domain || "Software Development"})
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenHandoffModal(h)}
+                        className="btn-secondary text-xs self-start sm:self-auto"
+                      >
+                        Edit Handoff
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/60">
+                        <strong className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                          Project Overview
+                        </strong>
+                        <p className="text-slate-700 whitespace-pre-line">{h.overview}</p>
+                      </div>
+                      <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/60">
+                        <strong className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                          Completed Work Summary
+                        </strong>
+                        <p className="text-slate-700 whitespace-pre-line">{h.completed_work}</p>
+                      </div>
+                    </div>
+
+                    {Array.isArray(h.technologies) && h.technologies.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {h.technologies.map((tech: string) => (
+                          <span
+                            key={tech}
+                            className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200"
+                          >
+                            {tech}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {(h.repository_url || h.deployment_url) && (
+                      <div className="flex items-center gap-4 text-xs flex-wrap">
+                        {h.repository_url && (
+                          <a
+                            href={h.repository_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-blue-600 hover:underline font-semibold inline-flex items-center gap-1"
+                          >
+                            <span>Repository: {h.repository_url}</span>
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                        {h.deployment_url && (
+                          <a
+                            href={h.deployment_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-emerald-700 hover:underline font-semibold inline-flex items-center gap-1"
+                          >
+                            <span>Deployment: {h.deployment_url}</span>
+                            <ExternalLink size={12} />
+                          </a>
+                        )}
+                      </div>
+                    )}
+
+                    {h.mentor_feedback && (
+                      <div className="p-3 rounded-xl bg-blue-50/70 border border-blue-200 text-xs">
+                        <strong className="text-[10px] font-bold uppercase tracking-wider text-blue-800 block mb-0.5">
+                          Mentor Review Feedback ({h.mentor_name || supervisorName})
+                        </strong>
+                        <p className="text-slate-800 italic">&ldquo;{h.mentor_feedback}&rdquo;</p>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </GlassCard>
+
+          {/* 6. FEATURE 4 — INTERNSHIP COMPLETION CERTIFICATE */}
+          <GlassCard className="p-6 border-emerald-200/80">
             <SectionHeader
-              title="Partner Employer Opportunities &amp; Fellowships"
-              subtitle="Browse partner industry openings for upcoming semester terms."
+              title="Official Internship Completion Certificate"
+              subtitle="Accredited completion verification and official downloadable PDF certificate issued upon completing all tasks, weekly reports, and mentor sign-off."
+              badge={
+                certificates.length > 0
+                  ? `Issued (${certificates[0].certificate_id})`
+                  : completionStatus?.eligible_for_certificate
+                  ? "Eligible for Certificate"
+                  : "In Progress"
+              }
               className="mb-4"
             />
-            <div className="space-y-3">
-              {(openInternships.length > 0 ? openInternships : [
-                {
-                  id: "sample-1",
-                  title: "Cloud Infrastructure Intern",
-                  company: { name: "Apex Cloud Systems" },
-                  location: "San Jose, CA (Hybrid)",
-                  required_skills: ["Docker", "Kubernetes", "Python", "AWS"],
-                },
-                {
-                  id: "sample-2",
-                  title: "Full Stack Engineering Intern",
-                  company: { name: "DataFlow Labs" },
-                  location: "Seattle, WA (Remote)",
-                  required_skills: ["React", "TypeScript", "FastAPI", "PostgreSQL"],
-                }
-              ]).map((opp: any) => (
-                <div
-                  key={opp.id}
-                  className="p-4 rounded-xl border border-slate-200/80 bg-white flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-blue-300 transition-all"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <strong className="text-sm text-slate-900">{opp.title}</strong>
-                      <span className="text-xs font-medium text-slate-500">• {opp.company?.name}</span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-0.5">{opp.location || "On-site"}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {(opp.required_skills || []).map((sk: string) => (
-                        <span key={sk} className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium">
-                          {sk}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-                    <button
-                      onClick={() => {
-                        handleAnalyzeGap(opp);
-                        setActiveTab("feedback");
-                      }}
-                      className="btn-secondary text-xs"
-                    >
-                      Analyze Skill Match
-                    </button>
-                  </div>
+
+            {certMsg && (
+              <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-2">
+                <Award size={16} className="text-emerald-600 shrink-0" />
+                <span>{certMsg}</span>
+              </div>
+            )}
+
+            {/* Completion Eligibility Checklist */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+              <div
+                className={`p-3.5 rounded-xl border text-xs ${
+                  (completionStatus?.tasks_completed ?? completedTasks) >=
+                    Math.max(1, completionStatus?.tasks_total ?? totalTasks)
+                    ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
+                    : "bg-slate-50 border-slate-200 text-slate-700"
+                }`}
+              >
+                <div className="font-bold flex items-center justify-between">
+                  <span>1. Assigned Tasks</span>
+                  <span>
+                    {completionStatus?.tasks_completed ?? completedTasks}/
+                    {completionStatus?.tasks_total ?? totalTasks}
+                  </span>
                 </div>
-              ))}
+                <p className="text-[11px] mt-1 opacity-80">All assigned internship tasks must be completed.</p>
+              </div>
+
+              <div
+                className={`p-3.5 rounded-xl border text-xs ${
+                  (completionStatus?.reports_submitted ?? reports.length) >= 1
+                    ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
+                    : "bg-slate-50 border-slate-200 text-slate-700"
+                }`}
+              >
+                <div className="font-bold flex items-center justify-between">
+                  <span>2. Weekly Reports</span>
+                  <span>{completionStatus?.reports_submitted ?? reports.length} Submitted</span>
+                </div>
+                <p className="text-[11px] mt-1 opacity-80">Required weekly activity reports with evidence submitted.</p>
+              </div>
+
+              <div
+                className={`p-3.5 rounded-xl border text-xs ${
+                  completionStatus?.completion_status === "COMPLETED" || certificates.length > 0
+                    ? "bg-emerald-50/70 border-emerald-200 text-emerald-900"
+                    : "bg-amber-50/70 border-amber-200 text-amber-900"
+                }`}
+              >
+                <div className="font-bold flex items-center justify-between">
+                  <span>3. Mentor / Admin Sign-Off</span>
+                  <span>
+                    {completionStatus?.completion_status === "COMPLETED" || certificates.length > 0
+                      ? "Confirmed"
+                      : "Pending Confirmation"}
+                  </span>
+                </div>
+                <p className="text-[11px] mt-1 opacity-80">
+                  Supervisor or Admin confirms final internship completion.
+                </p>
+              </div>
             </div>
+
+            {certificates.length > 0 ? (
+              <div className="space-y-4">
+                {certificates.map((cert: any) => (
+                  <div
+                    key={cert.certificate_id}
+                    className="p-6 rounded-2xl bg-gradient-to-br from-emerald-50/90 via-white to-blue-50/80 border-2 border-emerald-300 shadow-xs space-y-4"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-emerald-200/70 pb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Award size={24} />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-700 block">
+                            Official Accredited Completion Certificate • ID: {cert.certificate_id}
+                          </span>
+                          <h3 className="text-lg font-black text-slate-900">{cert.student_name}</h3>
+                          <p className="text-xs text-slate-600 font-semibold">
+                            {cert.internship_title} at {cert.company_name} • Domain: {cert.domain}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadCertificatePdf(cert.certificate_id)}
+                        className="btn-primary text-xs inline-flex items-center gap-1.5 self-start sm:self-auto"
+                      >
+                        <Download size={14} />
+                        <span>Download Certificate PDF</span>
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-slate-700 leading-relaxed italic bg-white/80 p-3.5 rounded-xl border border-emerald-100">
+                      &ldquo;{cert.statement}&rdquo;
+                    </p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Certificate ID</span>
+                        <strong className="font-mono text-slate-900">{cert.certificate_id}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Duration</span>
+                        <strong className="text-slate-900">
+                          {cert.duration_weeks} Weeks ({cert.start_date} – {cert.end_date})
+                        </strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Faculty Mentor</span>
+                        <strong className="text-slate-900">{cert.mentor_name}</strong>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold uppercase text-slate-400 block">Institution</span>
+                        <strong className="text-slate-900">{cert.institution_name}</strong>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-5 rounded-xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="text-xs text-slate-600">
+                  <strong className="text-slate-900 block mb-0.5">
+                    {completionStatus?.eligible_for_certificate
+                      ? "Your internship completion is verified! You can now generate your official certificate."
+                      : "Certificate Locked Until Full Internship Completion"}
+                  </strong>
+                  <span>
+                    {completionStatus?.blocking_reasons && completionStatus.blocking_reasons.length > 0
+                      ? `Pending: ${completionStatus.blocking_reasons.join(" • ")}`
+                      : "Complete all assigned tasks, submit weekly reports, and obtain Mentor/Admin completion confirmation."}
+                  </span>
+                </div>
+                {completionStatus?.eligible_for_certificate && (
+                  <button
+                    type="button"
+                    onClick={() => handleGenerateCertificate()}
+                    disabled={generatingCert}
+                    className="btn-primary text-xs shrink-0"
+                  >
+                    {generatingCert ? "Generating Certificate..." : "Generate Completion Certificate"}
+                  </button>
+                )}
+              </div>
+            )}
           </GlassCard>
         </div>
       )}
@@ -2377,54 +3960,92 @@ export default function StudentPortal() {
         <div className="space-y-6">
           <GlassCard className="p-6 max-w-3xl">
             <SectionHeader
-              title="Supervisor &amp; Workplace Communications"
-              subtitle="Official academic advisory and workplace check-in messages."
-              badge="Active Channel"
+              title="Supervisor &amp; Faculty Mentor Communications"
+              subtitle={
+                assignedMentorName
+                  ? `Direct communication channel with your assigned mentor: ${assignedMentorName} (${assignedMentorEmail || assignedMentorDept})`
+                  : "No mentor assigned yet."
+              }
+              badge={assignedMentorName ? "Active Channel" : "Unassigned"}
             />
 
-            <div className="space-y-4 mb-6">
-              <div className="p-4 rounded-2xl bg-blue-50/60 border border-blue-100 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                  DM
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <strong className="text-xs text-slate-900">Dr. Mehta (Faculty Supervisor)</strong>
-                    <span className="text-[10px] text-slate-400">Oct 22, 2026 • 2:15 PM</span>
-                  </div>
-                  <p className="text-xs text-slate-700 leading-relaxed mt-1">
-                    Please make sure to include the microservices architecture diagram and your test coverage metrics in your Week 8 submission report.
-                  </p>
-                </div>
+            {!assignedMentorName ? (
+              <div className="p-8 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                <p className="text-xs font-bold text-slate-700">No mentor assigned yet.</p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  You will be able to exchange messages once the university administrator assigns a faculty mentor to your account.
+                </p>
               </div>
-
-              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/70 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-emerald-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                  PS
+            ) : (
+              <>
+                <div className="space-y-4 mb-6 max-h-96 overflow-y-auto pr-1">
+                  {messages.length === 0 ? (
+                    <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 text-center text-xs text-slate-400">
+                      No messages yet with {assignedMentorName}. Send a message below to begin your conversation.
+                    </div>
+                  ) : (
+                    messages.map((msg: any) => {
+                      const isMe = msg.sender_role === "STUDENT";
+                      const initials = (msg.sender_name || "U")
+                        .split(" ")
+                        .map((w: string) => w[0])
+                        .slice(0, 2)
+                        .join("");
+                      return (
+                        <div
+                          key={msg.id}
+                          className={`p-4 rounded-2xl border flex items-start gap-3 ${
+                            isMe
+                              ? "bg-slate-50 border-slate-200/80 ml-6"
+                              : "bg-blue-50/60 border-blue-100 mr-6"
+                          }`}
+                        >
+                          <div
+                            className={`w-8 h-8 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 ${
+                              isMe ? "bg-slate-700" : "bg-blue-600"
+                            }`}
+                          >
+                            {initials}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <strong className="text-xs text-slate-900">
+                                {msg.sender_name} ({msg.sender_role === "MENTOR" ? "Faculty Supervisor" : "Student"})
+                              </strong>
+                              <span className="text-[10px] text-slate-400">
+                                {msg.created_at ? new Date(msg.created_at).toLocaleString() : "Just now"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-700 leading-relaxed mt-1 whitespace-pre-line">
+                              {msg.content}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <strong className="text-xs text-slate-900">Priya Sharma (Workplace Mentor)</strong>
-                    <span className="text-[10px] text-slate-400">Oct 21, 2026 • 4:40 PM</span>
-                  </div>
-                  <p className="text-xs text-slate-700 leading-relaxed mt-1">
-                    Great progress on the token serialization sprint! The engineering lead approved your PR #142 this morning.
-                  </p>
-                </div>
-              </div>
-            </div>
 
-            {/* Quick reply */}
-            <div className="flex gap-2">
-              <input
-                placeholder="Reply to faculty supervisor or workplace mentor..."
-                className="sims-input flex-1 text-xs"
-              />
-              <button className="btn-primary text-xs inline-flex items-center gap-1.5">
-                <Send size={14} />
-                <span>Send</span>
-              </button>
-            </div>
+                {/* Quick reply form */}
+                <form onSubmit={handleSendStudentMessage} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={studentMsgDraft}
+                    onChange={(e) => setStudentMsgDraft(e.target.value)}
+                    placeholder={`Message ${assignedMentorName}...`}
+                    className="sims-input flex-1 text-xs"
+                  />
+                  <button
+                    type="submit"
+                    disabled={sendingStudentMsg || !studentMsgDraft.trim()}
+                    className="btn-primary text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Send size={14} />
+                    <span>{sendingStudentMsg ? "Sending..." : "Send"}</span>
+                  </button>
+                </form>
+              </>
+            )}
           </GlassCard>
         </div>
       )}
@@ -2443,32 +4064,32 @@ export default function StudentPortal() {
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                 Full Name
               </span>
-              <strong className="text-sm text-slate-800">{user?.full_name}</strong>
+              <strong className="text-sm text-slate-800">{studentName}</strong>
             </div>
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/60">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                 Student ID
               </span>
-              <strong className="text-sm font-mono text-slate-800">#84920</strong>
+              <strong className="text-sm font-mono text-slate-800">{studentRoll}</strong>
             </div>
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/60">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                 Department
               </span>
-              <strong className="text-sm text-slate-800">Computer Science &amp; Engineering</strong>
+              <strong className="text-sm text-slate-800">{studentDept}</strong>
             </div>
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/60">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                 Cohort Academic Term
               </span>
-              <strong className="text-sm text-slate-800">Fall 2026 (4th Year)</strong>
+              <strong className="text-sm text-slate-800">{studentYear}</strong>
             </div>
           </div>
 
           <div className="mb-4">
             <label className="block text-xs font-bold text-slate-700 mb-2">Verified Skillset</label>
             <div className="flex flex-wrap gap-2 mb-3">
-              {(profile?.skills || ["Python", "FastAPI", "React", "Docker", "PostgreSQL"]).map(
+              {(profile?.skills || []).map(
                 (sk: string, idx: number) => (
                   <span
                     key={sk}
@@ -2705,18 +4326,812 @@ export default function StudentPortal() {
             />
           </div>
 
-          {/* Evidence URL */}
+          {/* Evidence URL (Required) */}
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
-              Optional Evidence / Artifact URL
+              Required Evidence / Artifact URL <span className="text-rose-500">*</span>
             </label>
             <input
-              type="url"
+              type="text"
+              required
               value={evidenceUrl}
-              onChange={(e) => setEvidenceUrl(e.target.value)}
+              onChange={(e) => {
+                setEvidenceUrl(e.target.value);
+                setFormErrors((prev) => ({ ...prev, evidenceUrl: "" }));
+              }}
               placeholder="https://github.com/org/repo/pull/12 or drive link"
+              className={`sims-input text-xs ${formErrors.evidenceUrl ? "border-rose-400 bg-rose-50/20" : ""}`}
+            />
+            {formErrors.evidenceUrl && (
+              <p className="text-[11px] text-rose-600 mt-0.5 font-semibold">{formErrors.evidenceUrl}</p>
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* ══════════════════════════════════════════════════ */}
+      {/* INTERNSHIP APPLICATION FORM MODAL                  */}
+      {/* ══════════════════════════════════════════════════ */}
+      <Modal
+        isOpen={showApplyModal && Boolean(applyingInternship)}
+        onClose={() => {
+          if (applyingId !== null) return;
+          setShowApplyModal(false);
+          setIsReviewingAppForm(false);
+          setAppFormError(null);
+        }}
+        title={
+          isReviewingAppForm
+            ? `Review Application — ${applyingInternship?.title || "Internship"}`
+            : `Internship Application Form — ${applyingInternship?.title || "Internship"}`
+        }
+        subtitle={`${applyingInternship?.company_name || applyingInternship?.company?.name || "Partner Employer"} • ${
+          applyingInternship?.location || (applyingInternship?.is_remote ? "Remote" : "On-site")
+        } • ${applyingInternship?.duration_weeks || 8} Weeks`}
+        footer={
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                if (isReviewingAppForm) {
+                  setIsReviewingAppForm(false);
+                } else {
+                  setShowApplyModal(false);
+                }
+              }}
+              disabled={applyingId !== null}
+              className="btn-secondary text-xs"
+            >
+              {isReviewingAppForm ? "← Back to Edit Form" : "Cancel"}
+            </button>
+            {!isReviewingAppForm ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!appForm.full_name.trim() || !appForm.email.trim()) {
+                    setAppFormError("Full Name and Email are required.");
+                    return;
+                  }
+                  if (appForm.technical_skills.length === 0 && !appForm.programming_languages.trim()) {
+                    setAppFormError("Please add at least one Technical Skill or Programming Language.");
+                    return;
+                  }
+                  setAppFormError(null);
+                  setIsReviewingAppForm(true);
+                }}
+                className="btn-primary text-xs"
+              >
+                Review Application &amp; Skill Match →
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={submitInternshipApplication}
+                disabled={applyingId !== null}
+                className="btn-primary text-xs"
+              >
+                {applyingId !== null ? "Submitting Application..." : "Confirm & Submit Application"}
+              </button>
+            )}
+          </>
+        }
+      >
+        {(() => {
+          const reqSkills: string[] = Array.isArray(applyingInternship?.required_skills)
+            ? applyingInternship.required_skills
+            : [];
+          const combinedCandidateSkills = Array.from(
+            new Set([
+              ...appForm.technical_skills,
+              ...splitCsvSkills(appForm.programming_languages),
+              ...splitCsvSkills(appForm.frameworks),
+              ...splitCsvSkills(appForm.tools),
+              ...splitCsvSkills(appForm.project_technologies),
+            ])
+          );
+          const candidateLower = new Set(combinedCandidateSkills.map((s) => s.toLowerCase()));
+          const previewMatched = reqSkills.filter((r) => candidateLower.has(r.toLowerCase()));
+          const previewMissing = reqSkills.filter((r) => !candidateLower.has(r.toLowerCase()));
+          const previewPct =
+            reqSkills.length > 0
+              ? Math.round((previewMatched.length / reqSkills.length) * 100)
+              : 100;
+
+          return (
+            <div className="space-y-5 max-h-[70vh] overflow-y-auto pr-1">
+              {appFormError && (
+                <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 flex items-center gap-2">
+                  <AlertCircle size={15} className="shrink-0" />
+                  <span>{appFormError}</span>
+                </div>
+              )}
+
+              {/* Live Skill Match Preview Banner */}
+              <div className="p-3.5 rounded-xl bg-blue-50/70 border border-blue-200/80 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-xs font-bold text-slate-900">
+                    Live Skill Match Analysis for {applyingInternship?.title}
+                  </span>
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-extrabold border ${
+                      previewPct >= 80
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : previewPct >= 50
+                        ? "bg-blue-100 text-blue-800 border-blue-200"
+                        : "bg-amber-50 text-amber-800 border-amber-200"
+                    }`}
+                  >
+                    Skill Match: {previewPct}% ({previewMatched.length}/{reqSkills.length || 1} Required Skills)
+                  </span>
+                </div>
+                {reqSkills.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {reqSkills.map((reqSk) => {
+                      const isMatched = candidateLower.has(reqSk.toLowerCase());
+                      return (
+                        <button
+                          key={reqSk}
+                          type="button"
+                          onClick={() => {
+                            if (!isMatched) {
+                              setAppForm((prev) => ({
+                                ...prev,
+                                technical_skills: [...prev.technical_skills, reqSk],
+                              }));
+                            }
+                          }}
+                          title={isMatched ? "Matched in your profile" : "Click to add if you have this skill"}
+                          className={`px-2 py-0.5 rounded-md text-[11px] font-semibold border transition-all ${
+                            isMatched
+                              ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              : "bg-amber-50 text-amber-800 border-amber-200 hover:border-amber-400"
+                          }`}
+                        >
+                          {isMatched ? `✓ ${reqSk}` : `⚠ Missing: ${reqSk} (+ Add)`}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {!isReviewingAppForm ? (
+                <>
+                  {/* SECTION 1: STUDENT INFORMATION */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 border-b border-slate-100 pb-1.5">
+                      1. Student Information
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Full Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.full_name}
+                          onChange={(e) => setAppForm({ ...appForm, full_name: e.target.value })}
+                          className="sims-input text-xs"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Email Address <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          value={appForm.email}
+                          onChange={(e) => setAppForm({ ...appForm, email: e.target.value })}
+                          className="sims-input text-xs"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Phone Number <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.phone}
+                          onChange={(e) => setAppForm({ ...appForm, phone: e.target.value })}
+                          placeholder="+91-9876543210"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          College / University <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.college}
+                          onChange={(e) => setAppForm({ ...appForm, college: e.target.value })}
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Degree
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.degree}
+                          onChange={(e) => setAppForm({ ...appForm, degree: e.target.value })}
+                          placeholder="B.Tech / B.E. / M.Tech"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Department / Branch <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.department}
+                          onChange={(e) => setAppForm({ ...appForm, department: e.target.value })}
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Current Year
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={5}
+                          value={appForm.current_year}
+                          onChange={(e) => setAppForm({ ...appForm, current_year: Number(e.target.value) })}
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Graduation Year
+                        </label>
+                        <input
+                          type="number"
+                          min={2024}
+                          max={2032}
+                          value={appForm.graduation_year}
+                          onChange={(e) => setAppForm({ ...appForm, graduation_year: Number(e.target.value) })}
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 2: SKILLS */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 border-b border-slate-100 pb-1.5">
+                      2. Technical &amp; Professional Skills
+                    </h4>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Technical Skills (Tag Chips) <span className="text-rose-500">*</span>
+                      </label>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {appForm.technical_skills.map((sk) => (
+                          <span
+                            key={sk}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200"
+                          >
+                            {sk}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAppFormSkill(sk)}
+                              className="hover:text-rose-600"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={appSkillInput}
+                          onChange={(e) => setAppSkillInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleAddAppFormSkill(appSkillInput);
+                            }
+                          }}
+                          placeholder="Add skill (e.g. Python, Docker, SQL, PyTorch) and press Enter..."
+                          className="sims-input text-xs flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleAddAppFormSkill(appSkillInput)}
+                          className="btn-secondary text-xs shrink-0"
+                        >
+                          + Add Skill
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Programming Languages
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.programming_languages}
+                          onChange={(e) => setAppForm({ ...appForm, programming_languages: e.target.value })}
+                          placeholder="Python, TypeScript, C++, SQL"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Frameworks &amp; Technologies
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.frameworks}
+                          onChange={(e) => setAppForm({ ...appForm, frameworks: e.target.value })}
+                          placeholder="FastAPI, React, Next.js, PyTorch"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Tools &amp; Platforms
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.tools}
+                          onChange={(e) => setAppForm({ ...appForm, tools: e.target.value })}
+                          placeholder="Git, Docker, Linux, AWS"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Soft Skills
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.soft_skills}
+                          onChange={(e) => setAppForm({ ...appForm, soft_skills: e.target.value })}
+                          placeholder="Problem Solving, Communication, Agile"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 3: ACADEMIC INFORMATION */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 border-b border-slate-100 pb-1.5">
+                      3. Academic Information
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          CGPA / Percentage <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.cgpa}
+                          onChange={(e) => setAppForm({ ...appForm, cgpa: e.target.value })}
+                          placeholder="e.g. 8.8 / 10"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Relevant Coursework
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.relevant_coursework}
+                          onChange={(e) => setAppForm({ ...appForm, relevant_coursework: e.target.value })}
+                          placeholder="Data Structures, DBMS, OS, Machine Learning"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SECTION 4: EXPERIENCE & PROJECTS */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 border-b border-slate-100 pb-1.5">
+                      4. Experience &amp; Key Projects
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Previous Internship Experience (if any)
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={appForm.previous_internship_experience}
+                          onChange={(e) =>
+                            setAppForm({ ...appForm, previous_internship_experience: e.target.value })
+                          }
+                          placeholder="Company, role, duration, and key outcomes..."
+                          className="sims-textarea text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Work / Research Experience (if any)
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={appForm.work_experience}
+                          onChange={(e) => setAppForm({ ...appForm, work_experience: e.target.value })}
+                          placeholder="Research labs, open-source contributions, or part-time roles..."
+                          className="sims-textarea text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Project Title
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.project_title}
+                          onChange={(e) => setAppForm({ ...appForm, project_title: e.target.value })}
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Project Technologies Used
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.project_technologies}
+                          onChange={(e) => setAppForm({ ...appForm, project_technologies: e.target.value })}
+                          placeholder="Python, FastAPI, React, Docker"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Project Description
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={appForm.project_description}
+                        onChange={(e) => setAppForm({ ...appForm, project_description: e.target.value })}
+                        className="sims-textarea text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* SECTION 5: OTHER INFORMATION */}
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-800 border-b border-slate-100 pb-1.5">
+                      5. Resume, Portfolio &amp; Additional Information
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Resume / CV URL or Summary
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.resume_url}
+                          onChange={(e) => setAppForm({ ...appForm, resume_url: e.target.value })}
+                          placeholder="https://drive.google.com/... or resume link"
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          Certifications
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.certifications}
+                          onChange={(e) => setAppForm({ ...appForm, certifications: e.target.value })}
+                          placeholder="AWS Certified, DeepLearning.AI, etc."
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          GitHub URL
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.github_url}
+                          onChange={(e) => setAppForm({ ...appForm, github_url: e.target.value })}
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                          LinkedIn / Portfolio URL
+                        </label>
+                        <input
+                          type="text"
+                          value={appForm.linkedin_url}
+                          onChange={(e) => setAppForm({ ...appForm, linkedin_url: e.target.value })}
+                          className="sims-input text-xs"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        Statement of Interest / Additional Information
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={appForm.additional_info}
+                        onChange={(e) => setAppForm({ ...appForm, additional_info: e.target.value })}
+                        className="sims-textarea text-xs"
+                      />
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* APPLICATION REVIEW STEP BEFORE FINAL SUBMISSION */
+                <div className="space-y-4">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
+                    <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
+                      Candidate Summary
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700">
+                      <p><strong>Name:</strong> {appForm.full_name}</p>
+                      <p><strong>Email:</strong> {appForm.email}</p>
+                      <p><strong>Phone:</strong> {appForm.phone}</p>
+                      <p><strong>College:</strong> {appForm.college}</p>
+                      <p><strong>Degree &amp; Branch:</strong> {appForm.degree} — {appForm.department}</p>
+                      <p><strong>Year / Graduation:</strong> Year {appForm.current_year} ({appForm.graduation_year})</p>
+                      <p><strong>CGPA:</strong> {appForm.cgpa}</p>
+                      <p><strong>Project:</strong> {appForm.project_title || "N/A"}</p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-white border border-slate-200/80 space-y-3 text-xs">
+                    <h4 className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px]">
+                      Skill Match &amp; Skill Gap Report
+                    </h4>
+                    <div>
+                      <p className="font-semibold text-emerald-800 mb-1">
+                        ✓ Matched Required Skills ({previewMatched.length}):
+                      </p>
+                      <p className="text-slate-700">
+                        {previewMatched.length > 0 ? previewMatched.join(", ") : "None"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-amber-800 mb-1">
+                        ⚠ Missing Skills / Skill Gap ({previewMissing.length}):
+                      </p>
+                      <p className="text-slate-700">
+                        {previewMissing.length > 0
+                          ? previewMissing.join(", ")
+                          : "None — 100% alignment with internship requirements!"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-slate-800 mb-1">
+                        Submitted Candidate Skills ({combinedCandidateSkills.length}):
+                      </p>
+                      <p className="text-slate-600">{combinedCandidateSkills.join(", ")}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+      </Modal>
+
+      {/* ══════════════════════════════════════════════════ */}
+      {/* FEATURE 2: KNOWLEDGE HANDOFF MODAL                 */}
+      {/* ══════════════════════════════════════════════════ */}
+      <Modal
+        isOpen={showHandoffModal}
+        onClose={() => {
+          if (savingHandoff) return;
+          setShowHandoffModal(false);
+        }}
+        title={editingHandoffId ? "Update Knowledge Handoff Document" : "Create Knowledge Handoff Document"}
+        subtitle="Structured internship knowledge transfer for your faculty mentor, admin, and future interns."
+        footer={
+          <>
+            <button
+              type="button"
+              disabled={savingHandoff}
+              onClick={() => setShowHandoffModal(false)}
+              className="btn-secondary text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={savingHandoff}
+              onClick={() => handleSaveHandoff("DRAFT")}
+              className="btn-secondary text-xs"
+            >
+              Save as Draft
+            </button>
+            <button
+              type="button"
+              disabled={savingHandoff}
+              onClick={() => handleSaveHandoff("SUBMITTED")}
+              className="btn-primary text-xs"
+            >
+              {savingHandoff ? "Submitting..." : "Submit Knowledge Handoff"}
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3.5 max-h-[70vh] overflow-y-auto pr-1 text-xs">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+              Handoff Title <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={handoffForm.title}
+              onChange={(e) => setHandoffForm({ ...handoffForm, title: e.target.value })}
+              className="sims-input text-xs"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+              Project Overview <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={2}
+              value={handoffForm.overview}
+              onChange={(e) => setHandoffForm({ ...handoffForm, overview: e.target.value })}
+              className="sims-textarea text-xs"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+              Completed Work Summary <span className="text-rose-500">*</span>
+            </label>
+            <textarea
+              rows={3}
+              value={handoffForm.completed_work}
+              onChange={(e) => setHandoffForm({ ...handoffForm, completed_work: e.target.value })}
+              className="sims-textarea text-xs"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-700 mb-1">
+              Technologies &amp; Tools Used (comma-separated)
+            </label>
+            <input
+              type="text"
+              value={handoffForm.technologies}
+              onChange={(e) => setHandoffForm({ ...handoffForm, technologies: e.target.value })}
               className="sims-input text-xs"
             />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Key Learned Concepts
+              </label>
+              <textarea
+                rows={2}
+                value={handoffForm.learned_concepts}
+                onChange={(e) => setHandoffForm({ ...handoffForm, learned_concepts: e.target.value })}
+                className="sims-textarea text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Important Modules / Architecture / Implementation Notes
+              </label>
+              <textarea
+                rows={2}
+                value={handoffForm.implementation_notes}
+                onChange={(e) => setHandoffForm({ ...handoffForm, implementation_notes: e.target.value })}
+                className="sims-textarea text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Challenges Faced
+              </label>
+              <textarea
+                rows={2}
+                value={handoffForm.challenges}
+                onChange={(e) => setHandoffForm({ ...handoffForm, challenges: e.target.value })}
+                className="sims-textarea text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Solutions Implemented
+              </label>
+              <textarea
+                rows={2}
+                value={handoffForm.solutions}
+                onChange={(e) => setHandoffForm({ ...handoffForm, solutions: e.target.value })}
+                className="sims-textarea text-xs"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Repository URL
+              </label>
+              <input
+                type="text"
+                value={handoffForm.repository_url}
+                onChange={(e) => setHandoffForm({ ...handoffForm, repository_url: e.target.value })}
+                className="sims-input text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Deployment / Demo URL
+              </label>
+              <input
+                type="text"
+                value={handoffForm.deployment_url}
+                onChange={(e) => setHandoffForm({ ...handoffForm, deployment_url: e.target.value })}
+                className="sims-input text-xs"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Pending Work / Future Improvements
+              </label>
+              <textarea
+                rows={2}
+                value={handoffForm.pending_work}
+                onChange={(e) => setHandoffForm({ ...handoffForm, pending_work: e.target.value })}
+                className="sims-textarea text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Recommendations for Next Intern / Team
+              </label>
+              <textarea
+                rows={2}
+                value={handoffForm.recommendations}
+                onChange={(e) => setHandoffForm({ ...handoffForm, recommendations: e.target.value })}
+                className="sims-textarea text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Known Issues / Risks
+              </label>
+              <textarea
+                rows={2}
+                value={handoffForm.known_issues}
+                onChange={(e) => setHandoffForm({ ...handoffForm, known_issues: e.target.value })}
+                className="sims-textarea text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                Final Handoff Notes
+              </label>
+              <textarea
+                rows={2}
+                value={handoffForm.final_notes}
+                onChange={(e) => setHandoffForm({ ...handoffForm, final_notes: e.target.value })}
+                className="sims-textarea text-xs"
+              />
+            </div>
           </div>
         </div>
       </Modal>

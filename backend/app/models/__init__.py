@@ -38,6 +38,7 @@ class Student(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    mentor_id = Column(Integer, ForeignKey("mentors.id", ondelete="SET NULL"), nullable=True)
     roll_number = Column(String(50), unique=True, index=True, nullable=False)
     department = Column(String(100), nullable=False, default="Computer Science & Engineering")
     academic_year = Column(Integer, default=3, nullable=False)
@@ -45,6 +46,7 @@ class Student(Base):
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     user = relationship("User", back_populates="student_profile")
+    assigned_mentor = relationship("Mentor", back_populates="assigned_students", foreign_keys=[mentor_id])
     skills = relationship("StudentSkill", back_populates="student", cascade="all, delete-orphan")
     applications = relationship("Application", back_populates="student", cascade="all, delete-orphan")
     active_internships = relationship("Internship", back_populates="student")
@@ -64,6 +66,7 @@ class Mentor(Base):
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     user = relationship("User", back_populates="mentor_profile")
+    assigned_students = relationship("Student", back_populates="assigned_mentor", foreign_keys="Student.mentor_id")
     assigned_internships = relationship("Internship", back_populates="mentor")
     interventions = relationship("Intervention", back_populates="mentor")
 
@@ -77,6 +80,7 @@ class Company(Base):
     website = Column(String(255), nullable=True)
     contact_email = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     internships = relationship("Internship", back_populates="company", cascade="all, delete-orphan")
@@ -90,12 +94,15 @@ class Internship(Base):
     company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
     mentor_id = Column(Integer, ForeignKey("mentors.id", ondelete="SET NULL"), nullable=True)
     student_id = Column(Integer, ForeignKey("students.id", ondelete="SET NULL"), nullable=True)
+    domain = Column(String(100), default="Software Development", nullable=False, index=True)
     description = Column(Text, nullable=False)
     location = Column(String(255), default="Remote", nullable=False)
     is_remote = Column(Boolean, default=True, nullable=False)
     stipend = Column(Float, default=0.0, nullable=False)
     duration_weeks = Column(Integer, default=8, nullable=False)
     status = Column(String(50), default="AVAILABLE", nullable=False)  # "AVAILABLE", "ACTIVE", "COMPLETED", "CLOSED"
+    completion_status = Column(String(50), default="IN_PROGRESS", nullable=False)  # "IN_PROGRESS", "COMPLETION_PENDING", "COMPLETED"
+    deadline = Column(DateTime, nullable=True)
     start_date = Column(DateTime, nullable=True)
     end_date = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
@@ -135,10 +142,16 @@ class Application(Base):
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
     internship_id = Column(Integer, ForeignKey("internships.id", ondelete="CASCADE"), nullable=False)
-    status = Column(String(50), default="PENDING", nullable=False)  # "PENDING", "APPROVED", "REJECTED"
+    status = Column(String(50), default="PENDING", nullable=False)  # "PENDING", "APPLIED", "UNDER_REVIEW", "SHORTLISTED", "APPROVED", "SELECTED", "REJECTED"
     applied_at = Column(DateTime, default=utc_now, nullable=False)
     reviewed_at = Column(DateTime, nullable=True)
     review_notes = Column(Text, nullable=True)
+    application_data = Column(Text, nullable=True)
+    submitted_skills = Column(Text, nullable=True)
+    skill_match_percentage = Column(Float, default=0.0, nullable=False)
+    matched_skills = Column(Text, nullable=True)
+    missing_skills = Column(Text, nullable=True)
+    skill_recommendation = Column(Text, nullable=True)
 
     student = relationship("Student", back_populates="applications")
     internship = relationship("Internship", back_populates="applications")
@@ -150,8 +163,12 @@ class Task(Base):
     id = Column(Integer, primary_key=True, index=True)
     internship_id = Column(Integer, ForeignKey("internships.id", ondelete="CASCADE"), nullable=False)
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False)
+    application_id = Column(Integer, ForeignKey("applications.id", ondelete="SET NULL"), nullable=True)
+    mentor_id = Column(Integer, ForeignKey("mentors.id", ondelete="SET NULL"), nullable=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    priority = Column(String(50), default="MEDIUM", nullable=False)  # "LOW", "MEDIUM", "HIGH"
+    status = Column(String(50), default="PENDING", nullable=False)  # "PENDING", "IN_PROGRESS", "COMPLETED", "OVERDUE"
     due_date = Column(DateTime, nullable=True)
     is_completed = Column(Boolean, default=False, nullable=False)
     completed_at = Column(DateTime, nullable=True)
@@ -170,6 +187,7 @@ class WeeklyReport(Base):
     week_number = Column(Integer, nullable=False)
     achievements = Column(Text, nullable=False)
     challenges = Column(Text, nullable=True)
+    evidence_url = Column(String(500), nullable=True)
     hours_spent = Column(Float, default=40.0, nullable=False)
     status = Column(String(50), default="SUBMITTED", nullable=False)  # "SUBMITTED", "REVIEWED"
     mentor_feedback = Column(Text, nullable=True)
@@ -195,4 +213,106 @@ class Intervention(Base):
 
     student = relationship("Student", back_populates="interventions")
     mentor = relationship("Mentor", back_populates="interventions")
+
+
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sender_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    mentor_id = Column(Integer, ForeignKey("mentors.id", ondelete="CASCADE"), nullable=False, index=True)
+    content = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    sender = relationship("User", foreign_keys=[sender_id])
+    receiver = relationship("User", foreign_keys=[receiver_id])
+    student = relationship("Student")
+    mentor = relationship("Mentor")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    notification_type = Column(String(50), default="SYSTEM", nullable=False)  # "MENTOR_ASSIGNMENT", "REMINDER", "PENDING_WORK", "MESSAGE", "SYSTEM"
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    user = relationship("User")
+
+
+class KnowledgeHandoff(Base):
+    __tablename__ = "knowledge_handoffs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    mentor_id = Column(Integer, ForeignKey("mentors.id", ondelete="SET NULL"), nullable=True, index=True)
+    internship_id = Column(Integer, ForeignKey("internships.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(255), nullable=False)
+    overview = Column(Text, nullable=False)
+    completed_work = Column(Text, nullable=True)
+    technologies = Column(Text, nullable=True)
+    learned_concepts = Column(Text, nullable=True)
+    implementation_notes = Column(Text, nullable=True)
+    challenges = Column(Text, nullable=True)
+    solutions = Column(Text, nullable=True)
+    resources = Column(Text, nullable=True)
+    repository_url = Column(String(500), nullable=True)
+    deployment_url = Column(String(500), nullable=True)
+    pending_work = Column(Text, nullable=True)
+    recommendations = Column(Text, nullable=True)
+    known_issues = Column(Text, nullable=True)
+    final_notes = Column(Text, nullable=True)
+    status = Column(String(50), default="DRAFT", nullable=False)  # "DRAFT", "SUBMITTED", "APPROVED", "CHANGES_REQUESTED"
+    mentor_feedback = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, nullable=False)
+
+    student = relationship("Student")
+    mentor = relationship("Mentor")
+    internship = relationship("Internship")
+
+
+class SkillDependency(Base):
+    __tablename__ = "skill_dependencies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    skill = Column(String(150), nullable=False, index=True)
+    prerequisite_skill = Column(String(150), nullable=False, index=True)
+    relationship = Column(String(50), default="REQUIRES", nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+
+class Certificate(Base):
+    __tablename__ = "certificates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    certificate_id = Column(String(100), unique=True, nullable=False, index=True)  # e.g. CERT-2026-0001
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    internship_id = Column(Integer, ForeignKey("internships.id", ondelete="CASCADE"), nullable=False, index=True)
+    mentor_id = Column(Integer, ForeignKey("mentors.id", ondelete="SET NULL"), nullable=True)
+    student_name = Column(String(255), nullable=False)
+    internship_title = Column(String(255), nullable=False)
+    company_name = Column(String(255), nullable=False)
+    domain = Column(String(100), default="Software Development", nullable=False)
+    duration_weeks = Column(Integer, default=8, nullable=False)
+    start_date = Column(DateTime, nullable=True)
+    end_date = Column(DateTime, nullable=True)
+    mentor_name = Column(String(255), nullable=True)
+    institution_name = Column(String(255), default="Smart Internship Monitoring & Academic Governance System", nullable=False)
+    statement = Column(Text, nullable=False)
+    issued_at = Column(DateTime, default=utc_now, nullable=False)
+
+    student = relationship("Student")
+    internship = relationship("Internship")
+    mentor = relationship("Mentor")
+
+
 

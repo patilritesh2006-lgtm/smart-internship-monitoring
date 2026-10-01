@@ -7,6 +7,7 @@ export interface SectionHeaderProps {
   badge?: React.ReactNode;
   subtitle?: string;
   action?: React.ReactNode;
+  icon?: React.ReactNode;
   className?: string;
 }
 
@@ -15,12 +16,14 @@ export function SectionHeader({
   badge,
   subtitle,
   action,
+  icon,
   className = "",
 }: SectionHeaderProps) {
   return (
     <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 mb-4 ${className}`}>
       <div>
         <div className="flex items-center gap-2 flex-wrap">
+          {icon && <span className="shrink-0">{icon}</span>}
           <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
             {title}
           </h3>

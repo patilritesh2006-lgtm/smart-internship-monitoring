@@ -235,20 +235,35 @@ class ProgressAttentionEngine:
         recommendations: List[str] = []
 
         # Check if rich feature metadata is present for evidence-based explanations
-        has_rich_metadata = bool(meta.get("total_tasks") or meta.get("expected_reports"))
+        has_rich_metadata = bool(
+            meta.get("total_tasks")
+            or meta.get("expected_reports")
+            or "is_early_stage" in meta
+        )
 
         if has_rich_metadata:
             total_tasks = meta.get("total_tasks", 0)
             completed_tasks = meta.get("completed_tasks", 0)
             incomplete_tasks = meta.get("incomplete_tasks", total_tasks - completed_tasks)
+            overdue_tasks = meta.get("overdue_tasks", 0)
+            is_early_stage = meta.get("is_early_stage", False)
             expected_reports = meta.get("expected_reports", 0)
             submitted_reports = meta.get("submitted_reports", 0)
             missing_reports = meta.get("missing_reports", max(0, expected_reports - submitted_reports))
             next_task = meta.get("next_task_title")
             trend_val = meta.get("progress_trend", "STABLE")
 
-            # 1. Milestone tasks
-            if tc < cls.BENCHMARK_THRESHOLD or incomplete_tasks > 0:
+            # Override status when genuine overdue tasks exist
+            if overdue_tasks > 0:
+                reasons.append(f"{overdue_tasks} of {total_tasks} assigned tasks are overdue past their due date.")
+                if overdue_tasks >= 2 or (overdue_tasks >= 1 and tc < 50.0):
+                    status = AttentionStatus.NEEDS_ATTENTION.value
+                    score = min(score, 45.0)
+                elif status == AttentionStatus.ON_TRACK.value:
+                    status = AttentionStatus.MONITOR.value
+
+            # 1. Milestone tasks (only flag when tc < benchmark or overdue_tasks > 0, not for early-stage/future-due tasks)
+            if tc < cls.BENCHMARK_THRESHOLD or (incomplete_tasks > 0 and not is_early_stage and tc < 100.0):
                 if total_tasks > 0:
                     reasons.append(f"{incomplete_tasks} of {total_tasks} assigned milestone tasks remain incomplete.")
                 else:
@@ -267,6 +282,11 @@ class ProgressAttentionEngine:
                     reasons.append("Weekly reports are pending.")
                 if missing_reports > 0:
                     recommendations.append("Submit the outstanding weekly progress reports.")
+                    if missing_reports >= 2 and rs == 0.0:
+                        status = AttentionStatus.NEEDS_ATTENTION.value
+                        score = min(score, 45.0)
+                    elif status == AttentionStatus.ON_TRACK.value:
+                        status = AttentionStatus.MONITOR.value
                 else:
                     recommendations.append("Submit pending weekly reports.")
 
