@@ -26,6 +26,7 @@ from backend.app.schemas import (
     MentorOut,
     StudentDetailOut,
     TaskCreate,
+    TaskEvaluationPayload,
     TaskOut,
     WeeklyReportOut,
     WeeklyReportReview,
@@ -277,13 +278,14 @@ def get_student_detail(
         .first()
     )
 
+    tasks = (
+        db.query(Task)
+        .filter(Task.student_id == student.id)
+        .order_by(Task.is_completed.asc(), Task.created_at.asc())
+        .all()
+    )
+
     if internship:
-        tasks = (
-            db.query(Task)
-            .filter(Task.student_id == student.id, Task.internship_id == internship.id)
-            .order_by(Task.is_completed.asc(), Task.created_at.asc())
-            .all()
-        )
         reports = (
             db.query(WeeklyReport)
             .filter(WeeklyReport.student_id == student.id, WeeklyReport.internship_id == internship.id)
@@ -291,12 +293,6 @@ def get_student_detail(
             .all()
         )
     else:
-        tasks = (
-            db.query(Task)
-            .filter(Task.student_id == student.id)
-            .order_by(Task.is_completed.asc(), Task.created_at.asc())
-            .all()
-        )
         reports = (
             db.query(WeeklyReport)
             .filter(WeeklyReport.student_id == student.id)
@@ -346,7 +342,7 @@ def get_student_detail(
         "recommendation": skill_gap_res.recommendation,
     }
 
-    task_outs = [format_task_out(t) for t in tasks]
+    task_outs = [format_task_out(t, db=db) for t in tasks]
 
     report_outs = [
         WeeklyReportOut(
@@ -495,6 +491,17 @@ def assign_student_task(
     if not student:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student record not found")
 
+    # Internal Faculty Mentor must NOT assign Company Tasks
+    if (
+        getattr(payload, "source", None) == "Company Provided"
+        or (getattr(payload, "source", None) and "company" in str(payload.source).lower())
+        or getattr(payload, "is_company_task", False)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Internal Faculty Mentors cannot assign Company Tasks. Company Tasks are assigned exclusively by the Company Coordinator.",
+        )
+
     internship = (
         db.query(Internship)
         .filter(Internship.student_id == student.id)
@@ -544,6 +551,8 @@ def assign_student_task(
         student_id=student.id,
         application_id=target_app_id,
         mentor_id=mentor.id,
+        assigned_by=user.full_name,
+        source="Curriculum Deliverable",
         title=payload.title.strip(),
         description=payload.description.strip() if payload.description else None,
         priority=prio,
@@ -760,4 +769,66 @@ def review_weekly_report(
         submitted_at=report.submitted_at,
         reviewed_at=report.reviewed_at,
     )
+
+
+@router.post("/tasks/{task_id}/evaluate", response_model=TaskOut)
+@router.put("/tasks/{task_id}/feedback", response_model=TaskOut)
+def evaluate_company_task(
+    task_id: int,
+    payload: TaskEvaluationPayload,
+    mentor_ctx=Depends(get_current_mentor),
+    db: Session = Depends(get_db),
+):
+    """Allows an assigned internal faculty mentor to provide feedback and evaluation score on a student's task."""
+    user, mentor = mentor_ctx
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    student = db.query(Student).filter(Student.id == task.student_id).first()
+    mentor_ids = _get_authorized_mentor_ids(user, mentor, db)
+
+    is_auth = (
+        task.mentor_id in mentor_ids
+        or (student and student.mentor_id in mentor_ids)
+        or user.role == "ADMIN"
+    )
+    if not is_auth:
+        raise HTTPException(status_code=403, detail="You are not authorized to evaluate this task")
+
+    task.feedback = payload.feedback.strip()
+    if payload.score is not None:
+        task.score = float(payload.score)
+
+    # Notify student
+    if student and student.user_id:
+        score_txt = f" (Score: {task.score}/100)" if task.score is not None else ""
+        db.add(
+            Notification(
+                user_id=student.user_id,
+                title="Task Evaluation & Feedback Received",
+                message=f"Faculty Mentor {user.full_name} reviewed '{task.title}': {task.feedback[:120]}{score_txt}.",
+                notification_type="TASK_EVALUATED",
+                is_read=False,
+            )
+        )
+
+    # Notify company coordinator if linked
+    from backend.app.models import ExternalMentor
+    if task.external_mentor_id:
+        ext_m = db.query(ExternalMentor).filter(ExternalMentor.id == task.external_mentor_id).first()
+        if ext_m and ext_m.user_id:
+            db.add(
+                Notification(
+                    user_id=ext_m.user_id,
+                    title="Faculty Mentor Evaluated Company Task",
+                    message=f"Faculty Mentor {user.full_name} reviewed '{task.title}' for {student.user.full_name if student and student.user else 'Student'}.",
+                    notification_type="TASK_EVALUATED",
+                    is_read=False,
+                )
+            )
+
+    db.commit()
+    db.refresh(task)
+    return format_task_out(task, db=db)
 

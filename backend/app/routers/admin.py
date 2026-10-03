@@ -5,9 +5,12 @@ from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_admin
 from backend.app.core.seed import ensure_unique_mentor_ids
+from backend.app.core.security import hash_password
 from backend.app.models import (
     Application,
     Company,
+    ExternalMentor,
+    ExternalMentorStudent,
     Internship,
     Intervention,
     Mentor,
@@ -35,6 +38,10 @@ from backend.app.schemas import (
     CompanyOut,
     CompanyUpdate,
     DepartmentAnalytics,
+    ExternalMentorAssignRequest,
+    ExternalMentorCreate,
+    ExternalMentorOut,
+    ExternalMentorUpdate,
     InstitutionalAnalyticsSchema,
     InternshipCreate,
     InternshipOut,
@@ -45,6 +52,7 @@ from backend.app.schemas import (
     StudentOut,
     WeeklyReportOut,
 )
+from backend.app.routers.external_mentors import _build_external_mentor_out
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -787,5 +795,164 @@ def list_admin_interventions(
             )
         )
     return out
+
+
+# ==============================================================================
+# External Mentor / Company Coordinator Management Endpoints
+# ==============================================================================
+
+@router.get("/external-mentors", response_model=List[ExternalMentorOut])
+def list_admin_external_mentors(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Returns all external mentors / company coordinators."""
+    mentors = db.query(ExternalMentor).order_by(ExternalMentor.created_at.desc()).all()
+    return [_build_external_mentor_out(db, m) for m in mentors]
+
+
+@router.post("/external-mentors", response_model=ExternalMentorOut, status_code=status.HTTP_201_CREATED)
+def create_admin_external_mentor(
+    payload: ExternalMentorCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Creates a new External Mentor / Company Coordinator account and links to company."""
+    company = db.query(Company).filter(Company.id == payload.company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Company not found")
+
+    existing_user = db.query(User).filter(User.email == payload.email).first()
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists",
+        )
+
+    user = User(
+        email=payload.email,
+        hashed_password=hash_password(payload.password),
+        full_name=payload.full_name,
+        role="EXTERNAL_MENTOR",
+        is_active=True,
+    )
+    db.add(user)
+    db.flush()
+
+    ext_mentor = ExternalMentor(
+        user_id=user.id,
+        company_id=company.id,
+        phone=payload.phone,
+        designation=payload.designation or "Company Internship Coordinator",
+    )
+    db.add(ext_mentor)
+    db.flush()
+
+    if payload.assigned_student_ids:
+        for sid in payload.assigned_student_ids:
+            st = db.query(Student).filter(Student.id == sid).first()
+            if st:
+                active_int = db.query(Internship).filter(Internship.student_id == st.id).first()
+                db.add(
+                    ExternalMentorStudent(
+                        external_mentor_id=ext_mentor.id,
+                        student_id=st.id,
+                        internship_id=active_int.id if active_int else None,
+                    )
+                )
+
+    db.commit()
+    db.refresh(ext_mentor)
+    return _build_external_mentor_out(db, ext_mentor)
+
+
+@router.put("/external-mentors/{mentor_id}", response_model=ExternalMentorOut)
+def update_admin_external_mentor(
+    mentor_id: int,
+    payload: ExternalMentorUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Updates external mentor details, company affiliation, or assigned students."""
+    ext_mentor = db.query(ExternalMentor).filter(ExternalMentor.id == mentor_id).first()
+    if not ext_mentor:
+        raise HTTPException(status_code=404, detail="External mentor not found")
+
+    user = ext_mentor.user or db.query(User).filter(User.id == ext_mentor.user_id).first()
+
+    if payload.full_name is not None and user:
+        user.full_name = payload.full_name
+    if payload.phone is not None:
+        ext_mentor.phone = payload.phone
+    if payload.designation is not None:
+        ext_mentor.designation = payload.designation
+    if payload.company_id is not None:
+        company = db.query(Company).filter(Company.id == payload.company_id).first()
+        if not company:
+            raise HTTPException(status_code=404, detail="Company not found")
+        ext_mentor.company_id = payload.company_id
+    if payload.is_active is not None and user:
+        user.is_active = payload.is_active
+
+    if payload.assigned_student_ids is not None:
+        db.query(ExternalMentorStudent).filter(ExternalMentorStudent.external_mentor_id == ext_mentor.id).delete()
+        for sid in payload.assigned_student_ids:
+            st = db.query(Student).filter(Student.id == sid).first()
+            if st:
+                active_int = db.query(Internship).filter(Internship.student_id == st.id).first()
+                db.add(
+                    ExternalMentorStudent(
+                        external_mentor_id=ext_mentor.id,
+                        student_id=st.id,
+                        internship_id=active_int.id if active_int else None,
+                    )
+                )
+
+    ext_mentor.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(ext_mentor)
+    return _build_external_mentor_out(db, ext_mentor)
+
+
+@router.post("/external-mentors/{mentor_id}/assign", response_model=ExternalMentorOut)
+def assign_admin_external_mentor(
+    mentor_id: int,
+    payload: ExternalMentorAssignRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Assigns or removes students from an external mentor / company coordinator."""
+    ext_mentor = db.query(ExternalMentor).filter(ExternalMentor.id == mentor_id).first()
+    if not ext_mentor:
+        raise HTTPException(status_code=404, detail="External mentor not found")
+
+    action = (payload.action or "assign").lower().strip()
+    for sid in payload.student_ids:
+        st = db.query(Student).filter(Student.id == sid).first()
+        if not st:
+            continue
+        existing_link = (
+            db.query(ExternalMentorStudent)
+            .filter(
+                ExternalMentorStudent.external_mentor_id == ext_mentor.id,
+                ExternalMentorStudent.student_id == st.id,
+            )
+            .first()
+        )
+        if action == "assign" and not existing_link:
+            active_int = db.query(Internship).filter(Internship.student_id == st.id).first()
+            db.add(
+                ExternalMentorStudent(
+                    external_mentor_id=ext_mentor.id,
+                    student_id=st.id,
+                    internship_id=active_int.id if active_int else None,
+                )
+            )
+        elif action == "remove" and existing_link:
+            db.delete(existing_link)
+
+    db.commit()
+    db.refresh(ext_mentor)
+    return _build_external_mentor_out(db, ext_mentor)
 
 

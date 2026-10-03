@@ -25,6 +25,7 @@ import {
   Bell,
   BookOpen,
   Briefcase,
+  Building2,
   Calendar,
   Check,
   CheckCircle2,
@@ -91,6 +92,9 @@ export default function StudentPortal() {
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [selectedReportDetail, setSelectedReportDetail] = useState<any | null>(null);
   const [timesheetSubTab, setTimesheetSubTab] = useState<"form" | "history">("form");
+  const [selectedTimesheetTaskId, setSelectedTimesheetTaskId] = useState<number | "">("");
+  const [timesheetTaskTitle, setTimesheetTaskTitle] = useState("");
+  const [timesheetTaskLink, setTimesheetTaskLink] = useState("");
 
   // Evidence files derived from user uploads/links
   const [attachments, setAttachments] = useState<
@@ -143,6 +147,11 @@ export default function StudentPortal() {
   // Profile skills
   const [newSkill, setNewSkill] = useState("");
   const [updatingProfile, setUpdatingProfile] = useState(false);
+
+  // External Mentor / Company Coordinator state
+  const [companyCoordinator, setCompanyCoordinator] = useState<any | null>(null);
+  const [messageChannel, setMessageChannel] = useState<"mentor" | "coordinator">("mentor");
+  const [coordinatorMessages, setCoordinatorMessages] = useState<any[]>([]);
 
   // Application submission & form modal state
   const [applyingId, setApplyingId] = useState<number | null>(null);
@@ -207,6 +216,8 @@ export default function StudentPortal() {
         hnds,
         compStat,
         certs,
+        coord,
+        coordMsgs,
       ] = await Promise.allSettled([
         api.getMyProfile(),
         api.getMyInternship(),
@@ -221,6 +232,8 @@ export default function StudentPortal() {
         api.getMyHandoffs(),
         api.getMyCompletionStatus(),
         api.getMyCertificates(),
+        api.getMyCompanyCoordinator(),
+        api.getMessages(undefined, "EXTERNAL_MENTOR"),
       ]);
       if (prof.status === "fulfilled") {
         setProfile(prof.value);
@@ -249,6 +262,8 @@ export default function StudentPortal() {
       if (hnds.status === "fulfilled") setHandoffs(hnds.value || []);
       if (compStat.status === "fulfilled") setCompletionStatus(compStat.value);
       if (certs.status === "fulfilled") setCertificates(certs.value || []);
+      if (coord.status === "fulfilled") setCompanyCoordinator(coord.value);
+      if (coordMsgs.status === "fulfilled") setCoordinatorMessages(coordMsgs.value || []);
 
       // Auto-trigger deterministic skill gap & dependency graph analysis if internship has required skills
       const loadedInternship = intern.status === "fulfilled" ? intern.value : null;
@@ -449,17 +464,31 @@ export default function StudentPortal() {
     setSendingStudentMsg(true);
     setError(null);
     try {
-      const created = await api.sendMessage({ content: studentMsgDraft.trim() });
-      setMessages((prev) => [...prev, created]);
+      if (messageChannel === "coordinator") {
+        const created = await api.sendMessage({
+          content: studentMsgDraft.trim(),
+          recipient_role: "EXTERNAL_MENTOR",
+          external_mentor_id: companyCoordinator?.id,
+        });
+        setCoordinatorMessages((prev) => [...prev, created]);
+      } else {
+        const created = await api.sendMessage({ content: studentMsgDraft.trim() });
+        setMessages((prev) => [...prev, created]);
+      }
       setStudentMsgDraft("");
     } catch (e: any) {
-      setError(e.message || "Failed to send message to mentor");
+      setError(e.message || "Failed to send message");
     } finally {
       setSendingStudentMsg(false);
     }
   };
 
   const handleToggleTask = async (taskId: number) => {
+    const target = tasks.find((t) => t.id === taskId);
+    if (target && (target.source === "Company Provided" || target.external_mentor_id)) {
+      setError("Direct completion is disabled for Company Provided Tasks. Submit task title and task link in Timesheet to complete this task.");
+      return;
+    }
     try {
       // Optimistic update for instantaneous feedback
       setTasks((prev) =>
@@ -483,6 +512,15 @@ export default function StudentPortal() {
     }
   };
 
+  const isUrlValid = (url: string) => {
+    try {
+      const u = new URL(url.trim());
+      return (u.protocol === "http:" || u.protocol === "https:") && Boolean(u.hostname);
+    } catch {
+      return false;
+    }
+  };
+
   const validateReportForm = () => {
     const errors: Record<string, string> = {};
     if (!reportWeek || reportWeek < 1) {
@@ -496,17 +534,38 @@ export default function StudentPortal() {
     if (isNaN(reportHours) || reportHours <= 0 || reportHours > 80) {
       errors.reportHours = "Please enter valid logged hours between 0.5 and 80.0 hours.";
     }
-    if (!evidenceUrl || !evidenceUrl.trim()) {
-      errors.evidenceUrl = "Verification evidence or artifact URL/reference is compulsory for weekly reports.";
+
+    if (selectedTimesheetTaskId) {
+      if (!timesheetTaskTitle || !timesheetTaskTitle.trim()) {
+        errors.timesheetTaskTitle = "Task Title is required for company task completion.";
+      }
+      if (!timesheetTaskLink || !timesheetTaskLink.trim()) {
+        errors.timesheetTaskLink = "Task Link / URL is required for company task completion.";
+      } else if (!isUrlValid(timesheetTaskLink)) {
+        errors.timesheetTaskLink = "Task Link must be a valid URL (e.g. https://github.com/student/project-task).";
+      }
     }
+
+    const effectiveEvidence = evidenceUrl.trim() || timesheetTaskLink.trim();
+    if (!effectiveEvidence) {
+      errors.evidenceUrl = "Verification evidence or task URL is compulsory for timesheet submission.";
+    } else if (!isUrlValid(effectiveEvidence)) {
+      errors.evidenceUrl = "Evidence reference must be a valid URL.";
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const formatAchievementsPayload = () => {
     const parts: string[] = [];
-    if (reportTitle.trim()) {
+    if (timesheetTaskTitle.trim()) {
+      parts.push(`Task Title: ${timesheetTaskTitle.trim()}`);
+    } else if (reportTitle.trim()) {
       parts.push(`Title: ${reportTitle.trim()}`);
+    }
+    if (timesheetTaskLink.trim()) {
+      parts.push(`Task Link: ${timesheetTaskLink.trim()}`);
     }
     parts.push(`Work Completed:\n${workCompleted.trim()}`);
     if (skillsUsed.length > 0) {
@@ -515,15 +574,16 @@ export default function StudentPortal() {
     if (nextWeekPlan.trim()) {
       parts.push(`Next Week Plan:\n${nextWeekPlan.trim()}`);
     }
-    if (evidenceUrl.trim()) {
-      parts.push(`Evidence Reference: ${evidenceUrl.trim()}`);
+    const finalEvidence = evidenceUrl.trim() || timesheetTaskLink.trim();
+    if (finalEvidence) {
+      parts.push(`Evidence Reference: ${finalEvidence}`);
     }
     return parts.join("\n\n");
   };
 
   const parseReportAchievements = (text: string) => {
     if (!text) return { title: null, work: "", skills: [], nextPlan: "", evidence: "" };
-    const titleMatch = text.match(/Title:\s*(.+)/i);
+    const titleMatch = text.match(/(?:Task )?Title:\s*(.+)/i);
     const workMatch = text.match(/Work Completed:\s*([\s\S]*?)(?=(Skills Applied:|Next Week Plan:|Evidence Reference:|$))/i);
     const skillsMatch = text.match(/Skills Applied:\s*(.+)/i);
     const nextMatch = text.match(/Next Week Plan:\s*([\s\S]*?)(?=(Evidence Reference:|$))/i);
@@ -543,27 +603,36 @@ export default function StudentPortal() {
     if (submittingReport) return; // Prevent duplicate submission while in flight
 
     if (!validateReportForm()) {
-      setReportMsg({ type: "error", text: "Please correct the required fields (including Required Evidence URL) before submitting." });
+      setReportMsg({ type: "error", text: "Please correct the required fields (including Task Title and valid Task Link) before submitting." });
       return;
     }
 
     setSubmittingReport(true);
     setReportMsg(null);
     try {
-      const payload = {
+      const finalEvidence = evidenceUrl.trim() || timesheetTaskLink.trim();
+      const payload: any = {
         week_number: Number(reportWeek),
         achievements: formatAchievementsPayload(),
         challenges: challengesFaced.trim() || undefined,
         hours_spent: Number(reportHours),
-        evidence_url: evidenceUrl.trim(),
+        evidence_url: finalEvidence,
         require_evidence: true,
       };
+
+      if (selectedTimesheetTaskId) {
+        payload.task_id = Number(selectedTimesheetTaskId);
+        payload.task_title = timesheetTaskTitle.trim();
+        payload.task_link = timesheetTaskLink.trim();
+      }
 
       await api.submitReport(payload);
 
       setReportMsg({
         type: "success",
-        text: `Week ${reportWeek} Activity Report submitted successfully! Forwarded to supervisor.`,
+        text: selectedTimesheetTaskId
+          ? "Task submitted successfully. Task marked as Completed."
+          : `Week ${reportWeek} Activity Report submitted successfully! Forwarded to supervisor.`,
       });
 
       // Refresh data
@@ -585,6 +654,9 @@ export default function StudentPortal() {
       setNextWeekPlan("");
       setEvidenceUrl("");
       setReportTitle("");
+      setSelectedTimesheetTaskId("");
+      setTimesheetTaskTitle("");
+      setTimesheetTaskLink("");
       setFormErrors({});
 
       const newMax = updatedReports.length > 0 ? Math.max(...updatedReports.map((r: any) => r.week_number || 1)) + 1 : 1;
@@ -1155,6 +1227,47 @@ export default function StudentPortal() {
           </div>
 
           {/* ─────────────────────────────────── */}
+          {/* COMPANY COORDINATOR SECTION         */}
+          {/* ─────────────────────────────────── */}
+          {companyCoordinator && (
+            <GlassCard className="p-5 border-l-4 border-l-teal-500">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center shrink-0">
+                    <Building2 size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                        Company Coordinator
+                      </span>
+                      <span className="text-xs font-bold text-slate-900">{companyCoordinator.company_name}</span>
+                    </div>
+                    <h3 className="text-sm font-extrabold text-slate-900 mt-1">
+                      {companyCoordinator.name}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {companyCoordinator.designation || "Company Internship Coordinator"} • {companyCoordinator.email}
+                      {companyCoordinator.phone && ` • ${companyCoordinator.phone}`}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setMessageChannel("coordinator");
+                    setActiveTab("messages");
+                  }}
+                  className="px-3.5 py-2 text-xs font-bold rounded-xl bg-teal-600 hover:bg-teal-700 text-white shadow-xs inline-flex items-center gap-2 transition-all shrink-0"
+                >
+                  <MessageSquare size={14} />
+                  <span>Message Coordinator</span>
+                </button>
+              </div>
+            </GlassCard>
+          )}
+
+          {/* ─────────────────────────────────── */}
           {/* 2 & 3. PROGRESS & KEY STAT CARDS   */}
           {/* ─────────────────────────────────── */}
           {/* 4 Summary StatCards */}
@@ -1416,52 +1529,139 @@ export default function StudentPortal() {
                 description="Your faculty supervisor will assign official curriculum milestones for this placement."
               />
             ) : (
-              <div className="space-y-2.5">
-                {tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`p-3.5 sm:p-4 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                      task.is_completed
-                        ? "bg-slate-50/60 border-slate-200/60"
-                        : "bg-white border-slate-200 hover:border-blue-300 shadow-2xs"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <button
-                        onClick={() => handleToggleTask(task.id)}
-                        className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
-                        aria-label={`Toggle task ${task.title}`}
-                      >
-                        {task.is_completed ? (
-                          <CheckCircle2 size={22} className="text-blue-600 fill-blue-50" />
-                        ) : (
-                          <Circle size={22} className="text-slate-300 hover:text-blue-400" />
-                        )}
-                      </button>
-                      <div className="min-w-0">
-                        <h4
-                          className={`text-xs sm:text-sm font-bold truncate ${
-                            task.is_completed ? "line-through text-slate-400" : "text-slate-800"
-                          }`}
-                        >
-                          {task.title}
-                        </h4>
-                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                          {task.description || "Core engineering deliverable."}
-                        </p>
+              <div className="space-y-3">
+                {tasks.map((task) => {
+                  const isCompany = task.source === "Company Provided" || Boolean(task.external_mentor_id);
+                  return (
+                    <div
+                      key={task.id}
+                      className={`p-4 rounded-xl border transition-all ${
+                        task.is_completed
+                          ? "bg-slate-50/60 border-slate-200/60"
+                          : "bg-white border-slate-200 hover:border-blue-300 shadow-2xs"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          {isCompany ? (
+                            <div className="pt-0.5 shrink-0" title={task.is_completed ? "Task Completed" : "Company task must be completed via Timesheet"}>
+                              {task.is_completed ? (
+                                <CheckCircle2 size={22} className="text-emerald-600 fill-emerald-50" />
+                              ) : (
+                                <Clock size={20} className="text-amber-500" />
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleToggleTask(task.id)}
+                              className="text-slate-400 hover:text-blue-600 transition-colors shrink-0 pt-0.5"
+                              aria-label={`Toggle task ${task.title}`}
+                            >
+                              {task.is_completed ? (
+                                <CheckCircle2 size={22} className="text-blue-600 fill-blue-50" />
+                              ) : (
+                                <Circle size={22} className="text-slate-300 hover:text-blue-400" />
+                              )}
+                            </button>
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              {isCompany && (
+                                <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                                  {task.source || "Company Provided"}
+                                </span>
+                              )}
+                              <h4
+                                className={`text-xs sm:text-sm font-bold truncate ${
+                                  task.is_completed ? "line-through text-slate-400" : "text-slate-800"
+                                }`}
+                              >
+                                {task.title}
+                              </h4>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                              {task.description || "Core engineering deliverable."}
+                            </p>
+
+                            {isCompany && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 mt-2.5 pt-2 border-t border-slate-100 text-[11px] text-slate-600">
+                                <div>
+                                  <span className="text-slate-400">Company: </span>
+                                  <strong className="text-slate-800">{task.company_name || companyName}</strong>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Company Coordinator: </span>
+                                  <strong className="text-slate-800">{task.company_coordinator_name || companyCoordinator?.name || "Company Coordinator"}</strong>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Internal Faculty Mentor: </span>
+                                  <span className="font-semibold text-slate-800">{task.internal_mentor_name || supervisorName}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Assigned By: </span>
+                                  <span className="font-medium text-teal-700">{task.assigned_by || task.company_coordinator_name || "Company Coordinator"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Source: </span>
+                                  <span className="font-medium text-blue-700">{task.source || "Company Provided"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Due Date: </span>
+                                  <span className="text-slate-700">{task.due_date ? new Date(task.due_date).toLocaleDateString() : "Flexible"}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {isCompany && !task.is_completed && (
+                              <div className="mt-2.5 flex items-center justify-between gap-2 p-2 rounded-lg bg-amber-50/80 border border-amber-200/70 text-[11px] text-amber-800">
+                                <div className="flex items-center gap-1.5">
+                                  <Clock size={12} className="text-amber-600 shrink-0" />
+                                  <span>Submit task title and task link in Timesheet to complete this task.</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTimesheetTaskId(task.id);
+                                    setTimesheetTaskTitle(task.title);
+                                    if (task.task_link) setTimesheetTaskLink(task.task_link);
+                                    setActiveTab("timesheets");
+                                  }}
+                                  className="underline font-bold text-amber-900 hover:text-amber-950 shrink-0 text-[11px]"
+                                >
+                                  Go to Timesheet &rarr;
+                                </button>
+                              </div>
+                            )}
+
+                            {isCompany && task.is_completed && task.task_link && (
+                              <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px]">
+                                <span className="text-slate-400">Submitted Task Link:</span>
+                                <a
+                                  href={task.task_link}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-bold text-blue-600 hover:underline truncate max-w-xs inline-flex items-center gap-1"
+                                >
+                                  <span>{task.task_link}</span>
+                                  <ExternalLink size={11} className="shrink-0" />
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {task.is_completed && task.completed_at && (
+                            <span className="text-[10px] text-slate-400 hidden sm:inline">
+                              {new Date(task.completed_at).toLocaleDateString()}
+                            </span>
+                          )}
+                          <StatusBadge status={task.is_completed ? "COMPLETED" : "In Progress"} size="sm" />
+                        </div>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {task.is_completed && task.completed_at && (
-                        <span className="text-[10px] text-slate-400 hidden sm:inline">
-                          {new Date(task.completed_at).toLocaleDateString()}
-                        </span>
-                      )}
-                      <StatusBadge status={task.is_completed ? "Completed" : "In Progress"} size="sm" />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </GlassCard>
@@ -2111,6 +2311,102 @@ export default function StudentPortal() {
                       ))}
                     </div>
 
+                    {/* Company Task Completion (Timesheet Workflow) */}
+                    <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/30 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Briefcase size={15} className="text-blue-600 shrink-0" />
+                          <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                            Company Provided Task Completion
+                          </span>
+                        </div>
+                        {selectedTimesheetTaskId ? (
+                          <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-700">
+                            Task Linked
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-slate-400">Optional for general logbook</span>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                            Select Company Task {selectedTimesheetTaskId ? <span className="text-rose-500">*</span> : null}
+                          </label>
+                          <select
+                            value={selectedTimesheetTaskId}
+                            onChange={(e) => {
+                              const val = e.target.value ? Number(e.target.value) : "";
+                              setSelectedTimesheetTaskId(val);
+                              const t = tasks.find((tk) => tk.id === val);
+                              if (t) {
+                                setTimesheetTaskTitle(t.title);
+                                if (t.task_link) setTimesheetTaskLink(t.task_link);
+                              } else {
+                                setTimesheetTaskTitle("");
+                              }
+                              setFormErrors((prev) => ({ ...prev, timesheetTaskTitle: "", timesheetTaskLink: "" }));
+                            }}
+                            className="sims-select w-full text-xs"
+                          >
+                            <option value="">-- Select Assigned Company Task --</option>
+                            {tasks
+                              .filter((t) => t.source === "Company Provided" || Boolean(t.external_mentor_id))
+                              .map((t) => (
+                                <option key={t.id} value={t.id}>
+                                  {t.title} {t.is_completed ? "(COMPLETED)" : "(In Progress)"}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                            Task Title {selectedTimesheetTaskId ? <span className="text-rose-500">*</span> : null}
+                          </label>
+                          <input
+                            type="text"
+                            value={timesheetTaskTitle}
+                            onChange={(e) => {
+                              setTimesheetTaskTitle(e.target.value);
+                              setFormErrors((prev) => ({ ...prev, timesheetTaskTitle: "" }));
+                            }}
+                            placeholder="e.g. Build Automated End-to-End Pipeline Deliverable"
+                            className={`sims-input text-xs ${formErrors.timesheetTaskTitle ? "border-rose-400 bg-rose-50/20" : ""}`}
+                          />
+                          {formErrors.timesheetTaskTitle && (
+                            <p className="text-[11px] text-rose-600 mt-1 font-semibold">{formErrors.timesheetTaskTitle}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                          Task Link / Task URL {selectedTimesheetTaskId ? <span className="text-rose-500">*</span> : null}
+                        </label>
+                        <input
+                          type="url"
+                          value={timesheetTaskLink}
+                          onChange={(e) => {
+                            setTimesheetTaskLink(e.target.value);
+                            if (!evidenceUrl.trim()) {
+                              setEvidenceUrl(e.target.value);
+                            }
+                            setFormErrors((prev) => ({ ...prev, timesheetTaskLink: "", evidenceUrl: "" }));
+                          }}
+                          placeholder="https://github.com/student/project-task"
+                          className={`sims-input text-xs ${formErrors.timesheetTaskLink ? "border-rose-400 bg-rose-50/20" : ""}`}
+                        />
+                        {formErrors.timesheetTaskLink && (
+                          <p className="text-[11px] text-rose-600 mt-1 font-semibold">{formErrors.timesheetTaskLink}</p>
+                        )}
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Required for Company Tasks. Task will be automatically marked COMPLETED upon valid Timesheet submission.
+                        </p>
+                      </div>
+                    </div>
+
                     {/* Work Completed (Required) */}
                     <div>
                       <div className="flex items-center justify-between mb-1">
@@ -2519,33 +2815,92 @@ export default function StudentPortal() {
             {tasks.map((task) => (
               <div
                 key={task.id}
-                className="p-4 rounded-xl border border-slate-200/80 bg-white/80 flex items-center justify-between gap-3 hover:border-blue-300 transition-all"
+                className="p-4 rounded-xl border border-slate-200/80 bg-white/80 flex flex-col gap-2 hover:border-blue-300 transition-all"
               >
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => handleToggleTask(task.id)}
-                    className="text-slate-400 hover:text-blue-600 transition-colors"
-                  >
-                    {task.is_completed ? (
-                      <CheckCircle2 size={22} className="text-blue-600 fill-blue-50" />
-                    ) : (
-                      <Circle size={22} className="text-slate-300" />
-                    )}
-                  </button>
-                  <div>
-                    <h4
-                      className={`text-sm font-bold ${
-                        task.is_completed ? "line-through text-slate-400" : "text-slate-800"
-                      }`}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handleToggleTask(task.id)}
+                      className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
                     >
-                      {task.title}
-                    </h4>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      {task.description || "Core milestone engineering deliverable."}
-                    </p>
+                      {task.is_completed ? (
+                        <CheckCircle2 size={22} className="text-blue-600 fill-blue-50" />
+                      ) : (
+                        <Circle size={22} className="text-slate-300" />
+                      )}
+                    </button>
+                    <div>
+                      <h4
+                        className={`text-sm font-bold ${
+                          task.is_completed ? "line-through text-slate-400" : "text-slate-800"
+                        }`}
+                      >
+                        {task.title}
+                      </h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {task.description || "Core milestone engineering deliverable."}
+                      </p>
+                    </div>
                   </div>
+                  <StatusBadge status={task.is_completed ? "Active & Approved" : (task.status || "Pending Review")} />
                 </div>
-                <StatusBadge status={task.is_completed ? "Active & Approved" : "Pending Review"} />
+
+                {/* Company & Ownership Metadata */}
+                <div className="ml-8 pt-2.5 border-t border-slate-100 flex flex-col gap-1.5 text-[11px] text-slate-500">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span>
+                      Company: <strong className="text-slate-800">{task.company_name || companyName || "Partner Company"}</strong>
+                    </span>
+                    {task.company_coordinator_name && (
+                      <>
+                        <span>•</span>
+                        <span>
+                          Coordinator: <strong className="text-slate-800">{task.company_coordinator_name}</strong>
+                        </span>
+                      </>
+                    )}
+                    <span>•</span>
+                    <span>
+                      Internal Faculty Mentor: <strong className="text-slate-800">{task.internal_mentor_name || assignedMentorName || "Supervising Faculty Mentor"}</strong>
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span>
+                      Assigned By: <strong className="text-teal-700">{task.assigned_by || task.company_coordinator_name || "Company Coordinator"}</strong>
+                    </span>
+                    <span>•</span>
+                    <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 font-semibold text-[10px]">
+                      {task.source || "Company Provided"}
+                    </span>
+                    <span>•</span>
+                    <span>
+                      Due Date: <span className="font-medium text-slate-700">{task.due_date ? new Date(task.due_date).toLocaleDateString() : "Flexible"}</span>
+                    </span>
+                    {task.is_completed && task.completed_at && (
+                      <>
+                        <span>•</span>
+                        <span>
+                          Completed: <span className="font-medium text-emerald-700">{new Date(task.completed_at).toLocaleDateString()}</span>
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {task.score !== null && task.score !== undefined && (
+                    <div className="mt-1 pt-1.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-600">Faculty Evaluation Score:</span>
+                      <strong className="text-emerald-700 font-extrabold">{task.score} / 100</strong>
+                    </div>
+                  )}
+
+                  {task.feedback && (
+                    <div className="mt-0.5 text-xs text-slate-600">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Faculty Feedback:</span>
+                      <p className="italic text-slate-700 bg-slate-50 p-2 rounded-lg border border-slate-200/60 mt-0.5">&ldquo;{task.feedback}&rdquo;</p>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -3139,8 +3494,22 @@ export default function StudentPortal() {
                             </span>
                             {app.mentor_name && (
                               <span>
-                                • Mentor: <strong className="text-slate-700">{app.mentor_name}</strong>
+                                • Faculty Mentor: <strong className="text-slate-700">{app.mentor_name}</strong>
                                 {app.mentor_code ? ` (${app.mentor_code})` : ""}
+                              </span>
+                            )}
+                            <span>
+                              • Company Coordinator:{" "}
+                              <strong className="text-slate-700">
+                                {app.company_coordinator_name || (companyCoordinator?.company_id === app.company_id ? companyCoordinator?.name : null) || (app.company_coordinator_name ? app.company_coordinator_name : companyCoordinator?.name ? companyCoordinator.name : "Not Assigned")}
+                              </strong>
+                            </span>
+                            {(app.company_coordinator_email || companyCoordinator?.email) && (
+                              <span>
+                                • Coordinator Email:{" "}
+                                <strong className="text-slate-700">
+                                  {app.company_coordinator_email || companyCoordinator?.email}
+                                </strong>
                               </span>
                             )}
                             <span>
@@ -3282,11 +3651,10 @@ export default function StudentPortal() {
                                   {t.description && (
                                     <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">{t.description}</p>
                                   )}
-                                  {t.due_date && (
-                                    <p className="text-[10px] text-slate-400 mt-0.5">
-                                      Due: {new Date(t.due_date).toLocaleDateString()}
-                                    </p>
-                                  )}
+                                  <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-500 flex-wrap">
+                                    <span>By: <strong className="text-teal-700">{t.assigned_by || "Company Coordinator"}</strong></span>
+                                    {t.due_date && <span>• Due: {new Date(t.due_date).toLocaleDateString()}</span>}
+                                  </div>
                                 </div>
                               </div>
                             ))}
@@ -3389,6 +3757,28 @@ export default function StudentPortal() {
                 </strong>
                 <span className="text-[10px] text-slate-400 block">Week {currentWeek} Active</span>
               </div>
+            </div>
+
+            {/* Company Coordinator Details */}
+            <div className="mt-4 pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-50/70 p-3 rounded-xl border border-slate-200/60">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500 font-medium">Company Coordinator:</span>
+                <strong className="text-slate-900 font-bold">
+                  {companyCoordinator?.name || internship?.company_coordinator_name ? (
+                    companyCoordinator?.name || internship?.company_coordinator_name
+                  ) : (
+                    "Not Assigned"
+                  )}
+                </strong>
+              </div>
+              {(companyCoordinator?.email || internship?.company_coordinator_email) && (
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 font-medium">Coordinator Email:</span>
+                  <strong className="text-teal-700 font-semibold">
+                    {companyCoordinator?.email || internship?.company_coordinator_email}
+                  </strong>
+                </div>
+              )}
             </div>
           </GlassCard>
 
@@ -3528,51 +3918,138 @@ export default function StudentPortal() {
               />
             ) : (
               <div className="space-y-3">
-                {tasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className={`p-4 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                      task.is_completed
-                        ? "bg-slate-50/60 border-slate-200/60"
-                        : "bg-white border-slate-200 hover:border-blue-300 shadow-2xs"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <button
-                        onClick={() => handleToggleTask(task.id)}
-                        className="text-slate-400 hover:text-blue-600 transition-colors shrink-0"
-                        aria-label={`Toggle task ${task.title}`}
-                      >
-                        {task.is_completed ? (
-                          <CheckCircle2 size={22} className="text-blue-600 fill-blue-50" />
-                        ) : (
-                          <Circle size={22} className="text-slate-300 hover:text-blue-400" />
-                        )}
-                      </button>
-                      <div className="min-w-0">
-                        <h4
-                          className={`text-xs sm:text-sm font-bold truncate ${
-                            task.is_completed ? "line-through text-slate-400" : "text-slate-800"
-                          }`}
-                        >
-                          {task.title}
-                        </h4>
-                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                          {task.description || "Core engineering deliverable."}
-                        </p>
+                {tasks.map((task) => {
+                  const isCompany = task.source === "Company Provided" || Boolean(task.external_mentor_id);
+                  return (
+                    <div
+                      key={task.id}
+                      className={`p-4 rounded-xl border transition-all ${
+                        task.is_completed
+                          ? "bg-slate-50/60 border-slate-200/60"
+                          : "bg-white border-slate-200 hover:border-blue-300 shadow-2xs"
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          {isCompany ? (
+                            <div className="pt-0.5 shrink-0" title={task.is_completed ? "Task Completed" : "Company task must be completed via Timesheet"}>
+                              {task.is_completed ? (
+                                <CheckCircle2 size={22} className="text-emerald-600 fill-emerald-50" />
+                              ) : (
+                                <Clock size={20} className="text-amber-500" />
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => handleToggleTask(task.id)}
+                              className="text-slate-400 hover:text-blue-600 transition-colors shrink-0 pt-0.5"
+                              aria-label={`Toggle task ${task.title}`}
+                            >
+                              {task.is_completed ? (
+                                <CheckCircle2 size={22} className="text-blue-600 fill-blue-50" />
+                              ) : (
+                                <Circle size={22} className="text-slate-300 hover:text-blue-400" />
+                              )}
+                            </button>
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              {isCompany && (
+                                <span className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                                  {task.source || "Company Provided"}
+                                </span>
+                              )}
+                              <h4
+                                className={`text-xs sm:text-sm font-bold truncate ${
+                                  task.is_completed ? "line-through text-slate-400" : "text-slate-800"
+                                }`}
+                              >
+                                {task.title}
+                              </h4>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                              {task.description || "Core engineering deliverable."}
+                            </p>
+
+                            {isCompany && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 mt-2.5 pt-2 border-t border-slate-100 text-[11px] text-slate-600">
+                                <div>
+                                  <span className="text-slate-400">Company: </span>
+                                  <strong className="text-slate-800">{task.company_name || companyName}</strong>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Company Coordinator: </span>
+                                  <strong className="text-slate-800">{task.company_coordinator_name || companyCoordinator?.name || "Company Coordinator"}</strong>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Internal Faculty Mentor: </span>
+                                  <span className="font-semibold text-slate-800">{task.internal_mentor_name || supervisorName}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Assigned By: </span>
+                                  <span className="font-medium text-teal-700">{task.assigned_by || task.company_coordinator_name || "Company Coordinator"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Source: </span>
+                                  <span className="font-medium text-blue-700">{task.source || "Company Provided"}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Due Date: </span>
+                                  <span className="text-slate-700">{task.due_date ? new Date(task.due_date).toLocaleDateString() : "Flexible"}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {isCompany && !task.is_completed && (
+                              <div className="mt-2.5 flex items-center justify-between gap-2 p-2 rounded-lg bg-amber-50/80 border border-amber-200/70 text-[11px] text-amber-800">
+                                <div className="flex items-center gap-1.5">
+                                  <Clock size={12} className="text-amber-600 shrink-0" />
+                                  <span>Submit task title and task link in Timesheet to complete this task.</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedTimesheetTaskId(task.id);
+                                    setTimesheetTaskTitle(task.title);
+                                    if (task.task_link) setTimesheetTaskLink(task.task_link);
+                                    setActiveTab("timesheets");
+                                  }}
+                                  className="underline font-bold text-amber-900 hover:text-amber-950 shrink-0 text-[11px]"
+                                >
+                                  Go to Timesheet &rarr;
+                                </button>
+                              </div>
+                            )}
+
+                            {isCompany && task.is_completed && task.task_link && (
+                              <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center gap-1.5 text-[11px]">
+                                <span className="text-slate-400">Submitted Task Link:</span>
+                                <a
+                                  href={task.task_link}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-bold text-blue-600 hover:underline truncate max-w-xs inline-flex items-center gap-1"
+                                >
+                                  <span>{task.task_link}</span>
+                                  <ExternalLink size={11} className="shrink-0" />
+                                </a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {task.is_completed && task.completed_at && (
+                            <span className="text-[10px] text-slate-400 hidden sm:inline">
+                              Verified on {new Date(task.completed_at).toLocaleDateString()}
+                            </span>
+                          )}
+                          <StatusBadge status={task.is_completed ? "COMPLETED" : "In Progress"} size="sm" />
+                        </div>
                       </div>
                     </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      {task.is_completed && task.completed_at && (
-                        <span className="text-[10px] text-slate-400 hidden sm:inline">
-                          Verified on {new Date(task.completed_at).toLocaleDateString()}
-                        </span>
-                      )}
-                      <StatusBadge status={task.is_completed ? "Completed" : "In Progress"} size="sm" />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </GlassCard>
@@ -3959,91 +4436,213 @@ export default function StudentPortal() {
       {activeTab === "messages" && (
         <div className="space-y-6">
           <GlassCard className="p-6 max-w-3xl">
-            <SectionHeader
-              title="Supervisor &amp; Faculty Mentor Communications"
-              subtitle={
-                assignedMentorName
-                  ? `Direct communication channel with your assigned mentor: ${assignedMentorName} (${assignedMentorEmail || assignedMentorDept})`
-                  : "No mentor assigned yet."
-              }
-              badge={assignedMentorName ? "Active Channel" : "Unassigned"}
-            />
+            {/* Communication Channel Selector */}
+            <div className="flex items-center gap-2 mb-6 p-1 bg-slate-100 rounded-xl max-w-sm">
+              <button
+                type="button"
+                onClick={() => setMessageChannel("mentor")}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  messageChannel === "mentor"
+                    ? "bg-white text-blue-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Users size={13} />
+                <span>Faculty Mentor</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMessageChannel("coordinator")}
+                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                  messageChannel === "coordinator"
+                    ? "bg-teal-600 text-white shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                <Building2 size={13} />
+                <span>Company Coordinator</span>
+              </button>
+            </div>
 
-            {!assignedMentorName ? (
-              <div className="p-8 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
-                <p className="text-xs font-bold text-slate-700">No mentor assigned yet.</p>
-                <p className="text-[11px] text-slate-500 mt-1">
-                  You will be able to exchange messages once the university administrator assigns a faculty mentor to your account.
-                </p>
-              </div>
+            {messageChannel === "coordinator" ? (
+              <>
+                <SectionHeader
+                  title="Company Coordinator Direct Channel"
+                  subtitle={
+                    companyCoordinator
+                      ? `Direct communication with ${companyCoordinator.name} (${companyCoordinator.company_name} • ${companyCoordinator.email})`
+                      : "No company coordinator assigned yet."
+                  }
+                  badge={companyCoordinator ? `${companyCoordinator.company_name} Coordinator` : "Unassigned"}
+                />
+
+                {!companyCoordinator ? (
+                  <div className="p-8 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                    <p className="text-xs font-bold text-slate-700">No company coordinator assigned yet.</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Once your company administrator or institutional admin allocates a company coordinator, you will be able to message them directly here.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-4 mb-6 max-h-96 overflow-y-auto pr-1">
+                      {coordinatorMessages.length === 0 ? (
+                        <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 text-center text-xs text-slate-400">
+                          No messages yet with {companyCoordinator.name}. Send a message below to start your conversation.
+                        </div>
+                      ) : (
+                        coordinatorMessages.map((msg: any) => {
+                          const isMe = msg.sender_role === "STUDENT";
+                          const initials = (msg.sender_name || "U")
+                            .split(" ")
+                            .map((w: string) => w[0])
+                            .slice(0, 2)
+                            .join("");
+                          return (
+                            <div
+                              key={msg.id}
+                              className={`p-4 rounded-2xl border flex items-start gap-3 ${
+                                isMe
+                                  ? "bg-slate-50 border-slate-200/80 ml-6"
+                                  : "bg-teal-50/70 border-teal-100 mr-6"
+                              }`}
+                            >
+                              <div
+                                className={`w-8 h-8 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 ${
+                                  isMe ? "bg-slate-700" : "bg-teal-600"
+                                }`}
+                              >
+                                {initials}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <strong className="text-xs text-slate-900">
+                                    {msg.sender_name} ({msg.sender_role === "EXTERNAL_MENTOR" ? "Company Coordinator" : "Student"})
+                                  </strong>
+                                  <span className="text-[10px] text-slate-400">
+                                    {msg.created_at ? new Date(msg.created_at).toLocaleString() : "Just now"}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-700 leading-relaxed mt-1 whitespace-pre-line">
+                                  {msg.content}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Quick reply form */}
+                    <form onSubmit={handleSendStudentMessage} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={studentMsgDraft}
+                        onChange={(e) => setStudentMsgDraft(e.target.value)}
+                        placeholder={`Message ${companyCoordinator.name}...`}
+                        className="sims-input flex-1 text-xs"
+                      />
+                      <button
+                        type="submit"
+                        disabled={sendingStudentMsg || !studentMsgDraft.trim()}
+                        className="btn-primary text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Send size={14} />
+                        <span>{sendingStudentMsg ? "Sending..." : "Send"}</span>
+                      </button>
+                    </form>
+                  </>
+                )}
+              </>
             ) : (
               <>
-                <div className="space-y-4 mb-6 max-h-96 overflow-y-auto pr-1">
-                  {messages.length === 0 ? (
-                    <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 text-center text-xs text-slate-400">
-                      No messages yet with {assignedMentorName}. Send a message below to begin your conversation.
-                    </div>
-                  ) : (
-                    messages.map((msg: any) => {
-                      const isMe = msg.sender_role === "STUDENT";
-                      const initials = (msg.sender_name || "U")
-                        .split(" ")
-                        .map((w: string) => w[0])
-                        .slice(0, 2)
-                        .join("");
-                      return (
-                        <div
-                          key={msg.id}
-                          className={`p-4 rounded-2xl border flex items-start gap-3 ${
-                            isMe
-                              ? "bg-slate-50 border-slate-200/80 ml-6"
-                              : "bg-blue-50/60 border-blue-100 mr-6"
-                          }`}
-                        >
-                          <div
-                            className={`w-8 h-8 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 ${
-                              isMe ? "bg-slate-700" : "bg-blue-600"
-                            }`}
-                          >
-                            {initials}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2">
-                              <strong className="text-xs text-slate-900">
-                                {msg.sender_name} ({msg.sender_role === "MENTOR" ? "Faculty Supervisor" : "Student"})
-                              </strong>
-                              <span className="text-[10px] text-slate-400">
-                                {msg.created_at ? new Date(msg.created_at).toLocaleString() : "Just now"}
-                              </span>
-                            </div>
-                            <p className="text-xs text-slate-700 leading-relaxed mt-1 whitespace-pre-line">
-                              {msg.content}
-                            </p>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                <SectionHeader
+                  title="Supervisor &amp; Faculty Mentor Communications"
+                  subtitle={
+                    assignedMentorName
+                      ? `Direct communication channel with your assigned mentor: ${assignedMentorName} (${assignedMentorEmail || assignedMentorDept})`
+                      : "No mentor assigned yet."
+                  }
+                  badge={assignedMentorName ? "Active Channel" : "Unassigned"}
+                />
 
-                {/* Quick reply form */}
-                <form onSubmit={handleSendStudentMessage} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={studentMsgDraft}
-                    onChange={(e) => setStudentMsgDraft(e.target.value)}
-                    placeholder={`Message ${assignedMentorName}...`}
-                    className="sims-input flex-1 text-xs"
-                  />
-                  <button
-                    type="submit"
-                    disabled={sendingStudentMsg || !studentMsgDraft.trim()}
-                    className="btn-primary text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
-                  >
-                    <Send size={14} />
-                    <span>{sendingStudentMsg ? "Sending..." : "Send"}</span>
-                  </button>
-                </form>
+                {!assignedMentorName ? (
+                  <div className="p-8 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                    <p className="text-xs font-bold text-slate-700">No mentor assigned yet.</p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      You will be able to exchange messages once the university administrator assigns a faculty mentor to your account.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="space-y-4 mb-6 max-h-96 overflow-y-auto pr-1">
+                      {messages.length === 0 ? (
+                        <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200/80 text-center text-xs text-slate-400">
+                          No messages yet with {assignedMentorName}. Send a message below to begin your conversation.
+                        </div>
+                      ) : (
+                        messages.map((msg: any) => {
+                          const isMe = msg.sender_role === "STUDENT";
+                          const initials = (msg.sender_name || "U")
+                            .split(" ")
+                            .map((w: string) => w[0])
+                            .slice(0, 2)
+                            .join("");
+                          return (
+                            <div
+                              key={msg.id}
+                              className={`p-4 rounded-2xl border flex items-start gap-3 ${
+                                isMe
+                                  ? "bg-slate-50 border-slate-200/80 ml-6"
+                                  : "bg-blue-50/60 border-blue-100 mr-6"
+                              }`}
+                            >
+                              <div
+                                className={`w-8 h-8 rounded-full text-white font-bold text-xs flex items-center justify-center shrink-0 ${
+                                  isMe ? "bg-slate-700" : "bg-blue-600"
+                                }`}
+                              >
+                                {initials}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <strong className="text-xs text-slate-900">
+                                    {msg.sender_name} ({msg.sender_role === "MENTOR" ? "Faculty Supervisor" : "Student"})
+                                  </strong>
+                                  <span className="text-[10px] text-slate-400">
+                                    {msg.created_at ? new Date(msg.created_at).toLocaleString() : "Just now"}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-700 leading-relaxed mt-1 whitespace-pre-line">
+                                  {msg.content}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {/* Quick reply form */}
+                    <form onSubmit={handleSendStudentMessage} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={studentMsgDraft}
+                        onChange={(e) => setStudentMsgDraft(e.target.value)}
+                        placeholder={`Message ${assignedMentorName}...`}
+                        className="sims-input flex-1 text-xs"
+                      />
+                      <button
+                        type="submit"
+                        disabled={sendingStudentMsg || !studentMsgDraft.trim()}
+                        className="btn-primary text-xs inline-flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        <Send size={14} />
+                        <span>{sendingStudentMsg ? "Sending..." : "Send"}</span>
+                      </button>
+                    </form>
+                  </>
+                )}
               </>
             )}
           </GlassCard>
@@ -4241,6 +4840,102 @@ export default function StudentPortal() {
               placeholder="e.g. Model Optimization & Training Pipeline"
               className="sims-input text-xs"
             />
+          </div>
+
+          {/* Company Task Completion (Timesheet Workflow) */}
+          <div className="p-3.5 rounded-xl border border-blue-200 bg-blue-50/30 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Briefcase size={15} className="text-blue-600 shrink-0" />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                  Company Task Completion
+                </span>
+              </div>
+              {selectedTimesheetTaskId ? (
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-blue-100 text-blue-700">
+                  Task Linked
+                </span>
+              ) : (
+                <span className="text-[10px] text-slate-400">Optional for general logbook</span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                  Select Company Task {selectedTimesheetTaskId ? <span className="text-rose-500">*</span> : null}
+                </label>
+                <select
+                  value={selectedTimesheetTaskId}
+                  onChange={(e) => {
+                    const val = e.target.value ? Number(e.target.value) : "";
+                    setSelectedTimesheetTaskId(val);
+                    const t = tasks.find((tk) => tk.id === val);
+                    if (t) {
+                      setTimesheetTaskTitle(t.title);
+                      if (t.task_link) setTimesheetTaskLink(t.task_link);
+                    } else {
+                      setTimesheetTaskTitle("");
+                    }
+                    setFormErrors((prev) => ({ ...prev, timesheetTaskTitle: "", timesheetTaskLink: "" }));
+                  }}
+                  className="sims-select w-full text-xs"
+                >
+                  <option value="">-- Select Assigned Company Task --</option>
+                  {tasks
+                    .filter((t) => t.source === "Company Provided" || Boolean(t.external_mentor_id))
+                    .map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title} {t.is_completed ? "(COMPLETED)" : "(In Progress)"}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                  Task Title {selectedTimesheetTaskId ? <span className="text-rose-500">*</span> : null}
+                </label>
+                <input
+                  type="text"
+                  value={timesheetTaskTitle}
+                  onChange={(e) => {
+                    setTimesheetTaskTitle(e.target.value);
+                    setFormErrors((prev) => ({ ...prev, timesheetTaskTitle: "" }));
+                  }}
+                  placeholder="e.g. Build Automated End-to-End Pipeline Deliverable"
+                  className={`sims-input text-xs ${formErrors.timesheetTaskTitle ? "border-rose-400 bg-rose-50/20" : ""}`}
+                />
+                {formErrors.timesheetTaskTitle && (
+                  <p className="text-[11px] text-rose-600 mt-0.5 font-semibold">{formErrors.timesheetTaskTitle}</p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1">
+                Task Link / Task URL {selectedTimesheetTaskId ? <span className="text-rose-500">*</span> : null}
+              </label>
+              <input
+                type="url"
+                value={timesheetTaskLink}
+                onChange={(e) => {
+                  setTimesheetTaskLink(e.target.value);
+                  if (!evidenceUrl.trim()) {
+                    setEvidenceUrl(e.target.value);
+                  }
+                  setFormErrors((prev) => ({ ...prev, timesheetTaskLink: "", evidenceUrl: "" }));
+                }}
+                placeholder="https://github.com/student/project-task"
+                className={`sims-input text-xs ${formErrors.timesheetTaskLink ? "border-rose-400 bg-rose-50/20" : ""}`}
+              />
+              {formErrors.timesheetTaskLink && (
+                <p className="text-[11px] text-rose-600 mt-0.5 font-semibold">{formErrors.timesheetTaskLink}</p>
+              )}
+              <p className="text-[10px] text-slate-400 mt-0.5">
+                Required for Company Tasks. Task will be automatically marked COMPLETED upon valid Timesheet submission.
+              </p>
+            </div>
           </div>
 
           {/* Work Completed */}

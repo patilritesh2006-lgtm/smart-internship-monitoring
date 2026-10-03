@@ -8,7 +8,7 @@ export interface UserSession {
   user_id: number;
   email: string;
   full_name: string;
-  role: "STUDENT" | "MENTOR" | "ADMIN";
+  role: "STUDENT" | "MENTOR" | "ADMIN" | "EXTERNAL_MENTOR";
 }
 
 interface AuthContextType {

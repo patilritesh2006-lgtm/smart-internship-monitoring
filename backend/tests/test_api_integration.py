@@ -95,14 +95,34 @@ def test_student_tasks_and_toggle(client):
 
     first_task = tasks[0]
     task_id = first_task["id"]
-    initial_completed = first_task["is_completed"]
 
-    toggle_res = client.post(f"/api/students/me/tasks/{task_id}/toggle", headers=headers)
-    assert toggle_res.status_code == 200
-    assert toggle_res.json()["is_completed"] != initial_completed
+    is_company = (first_task.get("source") == "Company Provided") or bool(first_task.get("external_mentor_id"))
+    if is_company:
+        # Direct toggle for Company Provided Tasks is strictly rejected (400 Bad Request)
+        toggle_res = client.post(f"/api/students/me/tasks/{task_id}/toggle", headers=headers)
+        assert toggle_res.status_code == 400
+        assert "Direct completion is disabled for Company Provided Tasks" in toggle_res.json()["detail"]
 
-    # Toggle back to maintain seeded state
-    client.post(f"/api/students/me/tasks/{task_id}/toggle", headers=headers)
+        if not first_task["is_completed"]:
+            # Valid timesheet submission completes the company task
+            ts_res = client.post(
+                "/api/students/me/timesheet/task",
+                headers=headers,
+                json={
+                    "task_id": task_id,
+                    "task_title": first_task["title"],
+                    "task_link": "https://github.com/alex/cloud-pipeline-task",
+                },
+            )
+            assert ts_res.status_code == 200
+            assert ts_res.json()["is_completed"] is True
+            assert ts_res.json()["status"] == "COMPLETED"
+    else:
+        initial_completed = first_task["is_completed"]
+        toggle_res = client.post(f"/api/students/me/tasks/{task_id}/toggle", headers=headers)
+        assert toggle_res.status_code == 200
+        assert toggle_res.json()["is_completed"] != initial_completed
+        client.post(f"/api/students/me/tasks/{task_id}/toggle", headers=headers)
 
 
 def test_student_live_attention_calculation(client):
@@ -1866,8 +1886,21 @@ def test_feature_4_completion_certificate_eligibility_generation_pdf_and_rbac(cl
     assert len(tasks) >= 3
     for t in tasks:
         if not t["is_completed"]:
-            tog = client.patch(f"/api/students/me/tasks/{t['id']}/toggle", headers=stu_headers)
-            assert tog.status_code == 200
+            is_company = (t.get("source") == "Company Provided") or bool(t.get("external_mentor_id"))
+            if is_company:
+                tog = client.post(
+                    "/api/students/me/timesheet/task",
+                    headers=stu_headers,
+                    json={
+                        "task_id": t["id"],
+                        "task_title": t["title"],
+                        "task_link": f"https://github.com/ananya/task-{t['id']}",
+                    },
+                )
+                assert tog.status_code == 200
+            else:
+                tog = client.patch(f"/api/students/me/tasks/{t['id']}/toggle", headers=stu_headers)
+                assert tog.status_code == 200
 
     rep_res = client.post(
         "/api/students/me/reports",

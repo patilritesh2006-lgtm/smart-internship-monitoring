@@ -2,11 +2,14 @@ import re
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
+from backend.app.core.database import Base
 from backend.app.core.security import hash_password
 from backend.app.models import (
     Application,
     Certificate,
     Company,
+    ExternalMentor,
+    ExternalMentorStudent,
     Internship,
     InternshipSkill,
     Intervention,
@@ -761,6 +764,7 @@ def ensure_schema_columns(db: Session) -> None:
     """Safely adds newly introduced columns to existing SQLite tables if missing."""
     try:
         bind = db.get_bind()
+        Base.metadata.create_all(bind=bind)
         inspector = inspect(bind)
         tables = set(inspector.get_table_names())
         if "students" in tables:
@@ -822,11 +826,21 @@ def ensure_schema_columns(db: Session) -> None:
                 ("mentor_id", "INTEGER REFERENCES mentors(id) ON DELETE SET NULL"),
                 ("priority", "VARCHAR(50) NOT NULL DEFAULT 'MEDIUM'"),
                 ("status", "VARCHAR(50) NOT NULL DEFAULT 'PENDING'"),
+                ("external_mentor_id", "INTEGER REFERENCES external_mentors(id) ON DELETE SET NULL"),
+                ("assigned_by", "VARCHAR(255)"),
+                ("source", "VARCHAR(100) DEFAULT 'Company Provided'"),
+                ("feedback", "TEXT"),
+                ("score", "FLOAT"),
             ]
             for col_name, col_type in task_migrations:
                 if col_name not in cols:
                     db.execute(text(f"ALTER TABLE tasks ADD COLUMN {col_name} {col_type}"))
                     db.commit()
+        if "messages" in tables:
+            cols = {c["name"] for c in inspector.get_columns("messages")}
+            if "external_mentor_id" not in cols:
+                db.execute(text("ALTER TABLE messages ADD COLUMN external_mentor_id INTEGER REFERENCES external_mentors(id) ON DELETE CASCADE"))
+                db.commit()
     except Exception:
         db.rollback()
 
@@ -1568,4 +1582,56 @@ def sync_all_notifications(db: Session) -> None:
                         is_read=False,
                     )
                 )
+
+    # D. Ensure Demo External Mentor (Company Coordinator) exists
+    microsoft_co = db.query(Company).filter(Company.name == "Microsoft").first()
+    if not microsoft_co:
+        microsoft_co = db.query(Company).first()
+
+    if microsoft_co:
+        ext_user = db.query(User).filter(User.email.in_(["john@company.com", "coordinator@demo.com"])).first()
+        if not ext_user:
+            ext_user = User(
+                email="john@company.com",
+                hashed_password=hash_password("Coordinator@123"),
+                full_name="John Smith",
+                role="EXTERNAL_MENTOR",
+                is_active=True,
+            )
+            db.add(ext_user)
+            db.flush()
+
+        ext_profile = db.query(ExternalMentor).filter(ExternalMentor.user_id == ext_user.id).first()
+        if not ext_profile:
+            ext_profile = ExternalMentor(
+                user_id=ext_user.id,
+                company_id=microsoft_co.id,
+                designation="Company Internship Coordinator",
+                phone="+1 (555) 234-5678",
+            )
+            db.add(ext_profile)
+            db.flush()
+
+        # Link Rohan Patil (Student 1) to John Smith if not already linked
+        demo_student = db.query(Student).filter(Student.id == 1).first()
+        if demo_student:
+            has_link = db.query(ExternalMentorStudent).filter(
+                ExternalMentorStudent.external_mentor_id == ext_profile.id,
+                ExternalMentorStudent.student_id == demo_student.id,
+            ).first()
+            if not has_link:
+                active_int = (
+                    db.query(Internship)
+                    .filter(Internship.student_id == demo_student.id)
+                    .first()
+                )
+                db.add(
+                    ExternalMentorStudent(
+                        external_mentor_id=ext_profile.id,
+                        student_id=demo_student.id,
+                        internship_id=active_int.id if active_int else None,
+                    )
+                )
+
+        db.commit()
 

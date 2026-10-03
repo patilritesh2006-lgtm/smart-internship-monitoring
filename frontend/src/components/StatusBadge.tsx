@@ -30,9 +30,9 @@ export function StatusBadge({ status, size = "sm", className = "" }: StatusBadge
 
   const px = size === "lg" ? "px-3.5 py-1.5 text-xs" : size === "md" ? "px-3 py-1 text-xs" : "px-2.5 py-0.5 text-[11px]";
 
-  // 1. Emerald / Active / Approved / On Track
-  if (norm === "ON_TRACK" || norm === "ACTIVE & APPROVED" || norm === "PASSED" || norm === "OPTIMAL" || norm === "AVAILABLE" || norm === "ACCEPTED") {
-    const label = status === "ON_TRACK" ? "On Track" : status;
+  // 1. Emerald / Active / Approved / On Track / Completed
+  if (norm === "ON_TRACK" || norm === "ACTIVE & APPROVED" || norm === "PASSED" || norm === "OPTIMAL" || norm === "AVAILABLE" || norm === "ACCEPTED" || norm === "COMPLETED") {
+    const label = status === "ON_TRACK" ? "On Track" : status === "COMPLETED" ? "COMPLETED" : status;
     return (
       <span className={`inline-flex items-center gap-1.5 ${px} font-bold rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 shrink-0 ${className}`}>
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
@@ -93,7 +93,7 @@ export function StatusBadge({ status, size = "sm", className = "" }: StatusBadge
 export function StatusDot({ status }: { status: Status }) {
   const norm = String(status).toUpperCase();
   let color = "bg-slate-400";
-  if (norm.includes("TRACK") || norm.includes("APPROVED") || norm.includes("PASSED")) color = "bg-emerald-500";
+  if (norm.includes("TRACK") || norm.includes("APPROVED") || norm.includes("PASSED") || norm.includes("COMPLETED")) color = "bg-emerald-500";
   else if (norm.includes("MONITOR") || norm.includes("PENDING")) color = "bg-amber-500";
   else if (norm.includes("ATTENTION") || norm.includes("URGENT") || norm.includes("CRITICAL")) color = "bg-rose-500";
   else if (norm.includes("VERIFIED")) color = "bg-purple-500";

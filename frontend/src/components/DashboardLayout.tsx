@@ -64,6 +64,14 @@ export function DashboardLayout({
         { id: "settings",    label: "Settings",    icon: <Settings size={19} /> },
       ];
     }
+    if (role === "EXTERNAL_MENTOR") {
+      return [
+        { id: "overview", label: "Home", icon: <BarChart2 size={19} /> },
+        { id: "students", label: "Students", icon: <Users size={19} /> },
+        { id: "tasks", label: "Tasks", icon: <Briefcase size={19} /> },
+        { id: "messages", label: "Messages", icon: <MessageSquare size={19} /> },
+      ];
+    }
     // ADMIN or default
     return [
       { id: "overview",    label: "Command",     icon: <BarChart2 size={19} /> },

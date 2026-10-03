@@ -64,13 +64,12 @@ export default function FacultyStudentMonitoringPage() {
   const [studentDetail, setStudentDetail] = useState<any | null>(null);
   const [studentApplications, setStudentApplications] = useState<any[]>([]);
 
-  // Assign Internship Task State
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskDescription, setNewTaskDescription] = useState("");
-  const [newTaskPriority, setNewTaskPriority] = useState("HIGH");
-  const [newTaskDueDate, setNewTaskDueDate] = useState("");
-  const [submittingTask, setSubmittingTask] = useState(false);
-  const [taskSuccessMsg, setTaskSuccessMsg] = useState<string | null>(null);
+  // Company Task Faculty Evaluation State
+  const [selectedTaskForEvaluation, setSelectedTaskForEvaluation] = useState<any | null>(null);
+  const [taskFeedback, setTaskFeedback] = useState("");
+  const [taskScore, setTaskScore] = useState<number>(85);
+  const [evaluatingTask, setEvaluatingTask] = useState(false);
+  const [taskEvalSuccessMsg, setTaskEvalSuccessMsg] = useState<string | null>(null);
 
   // Review Report Modal State
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
@@ -203,32 +202,37 @@ export default function FacultyStudentMonitoringPage() {
     }
   };
 
-  const handleAssignTask = async (e: React.FormEvent) => {
+  const handleOpenTaskEvaluationModal = (task: any) => {
+    setSelectedTaskForEvaluation(task);
+    setTaskFeedback(task.feedback || "Deliverable verified. Satisfies academic standards and corporate objectives.");
+    setTaskScore(task.score !== null && task.score !== undefined ? task.score : 85);
+    setTaskEvalSuccessMsg(null);
+  };
+
+  const handleSubmitTaskEvaluation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle.trim()) return;
-    setSubmittingTask(true);
+    if (!selectedTaskForEvaluation) return;
+    if (!taskFeedback.trim()) {
+      setError("Please provide written supervisory feedback.");
+      return;
+    }
+    setEvaluatingTask(true);
     setError(null);
-    setTaskSuccessMsg(null);
     try {
-      const primaryApp = studentApplications[0];
-      await api.assignStudentTask(studentId, {
-        title: newTaskTitle.trim(),
-        description: newTaskDescription.trim() || undefined,
-        priority: newTaskPriority,
-        due_date: newTaskDueDate ? new Date(newTaskDueDate).toISOString() : undefined,
-        internship_id: primaryApp?.internship_id || undefined,
-        application_id: primaryApp?.id || undefined,
+      await api.evaluateMentorTask(selectedTaskForEvaluation.id, {
+        feedback: taskFeedback.trim(),
+        score: Number(taskScore),
       });
-      setTaskSuccessMsg("Internship-specific task assigned to student and notification dispatched!");
-      setNewTaskTitle("");
-      setNewTaskDescription("");
-      setNewTaskDueDate("");
+      setTaskEvalSuccessMsg("Task evaluation grade and feedback recorded successfully!");
       await loadStudentDetail();
-      setTimeout(() => setTaskSuccessMsg(null), 3500);
+      setTimeout(() => {
+        setSelectedTaskForEvaluation(null);
+        setTaskEvalSuccessMsg(null);
+      }, 1500);
     } catch (e: any) {
-      setError(e.message || "Failed to assign task to student");
+      setError(e.message || "Failed to submit task evaluation");
     } finally {
-      setSubmittingTask(false);
+      setEvaluatingTask(false);
     }
   };
 
@@ -909,6 +913,57 @@ export default function FacultyStudentMonitoringPage() {
                               </div>
                             </div>
                           )}
+
+                          {/* Extra Task Details & Faculty Evaluation */}
+                          {isTask && ev.meta && (
+                            <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                                <span>
+                                  Assigned By: <strong className="text-teal-700">{ev.meta.assigned_by || "Company Coordinator"}</strong> ({ev.meta.source || "Company Provided"})
+                                </span>
+                                <span>Due: {ev.meta.due_date ? new Date(ev.meta.due_date).toLocaleDateString() : "Flexible"}</span>
+                              </div>
+                              {ev.meta.task_link && (
+                                <div className="text-xs flex items-center gap-1.5">
+                                  <span className="font-bold text-slate-600">Submitted Task Link:</span>
+                                  <a
+                                    href={ev.meta.task_link}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-blue-600 hover:underline font-semibold inline-flex items-center gap-1"
+                                  >
+                                    <span>{ev.meta.task_link}</span>
+                                    <ExternalLink size={11} />
+                                  </a>
+                                </div>
+                              )}
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                {ev.meta.score !== null && ev.meta.score !== undefined ? (
+                                  <div className="text-xs font-semibold text-slate-700">
+                                    Faculty Grade: <strong className="text-emerald-700">{ev.meta.score} / 100</strong>
+                                    {ev.meta.feedback && (
+                                      <span className="text-slate-500 ml-2 italic truncate max-w-xs inline-block align-bottom">
+                                        &ldquo;{ev.meta.feedback}&rdquo;
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-xs font-semibold text-amber-700">
+                                    Awaiting Faculty Evaluation
+                                  </span>
+                                )}
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenTaskEvaluationModal(ev.meta)}
+                                  className="px-3 py-1 bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold rounded-lg transition-colors inline-flex items-center gap-1 ml-auto"
+                                >
+                                  <Star size={12} />
+                                  <span>{ev.meta.score !== null && ev.meta.score !== undefined ? "Re-evaluate Task" : "Evaluate & Grade Task"}</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -1094,89 +1149,85 @@ export default function FacultyStudentMonitoringPage() {
 
           {/* Right 1 Col: SECTION 7 - Assign Internship Task & Intervention Record Form */}
           <div className="space-y-6">
-            {/* Assign Internship-Specific Task Form */}
-            <GlassCard className="p-5 sm:p-6 border-blue-200/80">
-              <div className="flex items-center gap-2 mb-1">
-                <Target size={16} className="text-blue-600" />
-                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                  Assign Internship Task
-                </h3>
+            {/* Company Task Monitoring & Faculty Evaluation */}
+            <GlassCard className="p-5 sm:p-6 border-teal-200/80">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-2">
+                  <Target size={16} className="text-teal-600" />
+                  <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                    Company Task Monitoring &amp; Evaluation
+                  </h3>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 border border-teal-200">
+                  Faculty Oversight
+                </span>
               </div>
               <p className="text-xs text-slate-500 mb-4">
-                Assign a milestone deliverable specific to {studentDetail.internship_title} ({studentDetail.company_name}).
+                Company tasks are assigned by the Company Coordinator ({studentDetail.company_name || "Partner Company"}). As Supervising Faculty Mentor, monitor progress, inspect deliverables, and assign evaluation feedback &amp; grades.
               </p>
 
-              <form onSubmit={handleAssignTask} className="space-y-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                    Task Title <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={newTaskTitle}
-                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                    required
-                    placeholder={`e.g. Implement ${skillGap.missing_skills?.[0] || "Core Module"} Deliverable`}
-                    className="sims-input text-xs w-full"
-                  />
+              {(!studentDetail.tasks || studentDetail.tasks.length === 0) ? (
+                <div className="p-5 text-center bg-slate-50 rounded-xl border border-slate-200/70 text-xs text-slate-500">
+                  No company tasks have been assigned to this intern yet.
                 </div>
-
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                    Task Description &amp; Acceptance Criteria
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={newTaskDescription}
-                    onChange={(e) => setNewTaskDescription(e.target.value)}
-                    placeholder="Specify technical deliverables, required skills, and verification steps..."
-                    className="sims-textarea text-xs w-full"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                      Priority
-                    </label>
-                    <select
-                      value={newTaskPriority}
-                      onChange={(e) => setNewTaskPriority(e.target.value)}
-                      className="sims-input text-xs w-full bg-white"
+              ) : (
+                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                  {studentDetail.tasks.map((task: any) => (
+                    <div
+                      key={task.id}
+                      className="p-3.5 rounded-xl border border-slate-200/90 bg-white/90 shadow-2xs space-y-2 hover:border-teal-300 transition-all"
                     >
-                      <option value="HIGH">HIGH</option>
-                      <option value="MEDIUM">MEDIUM</option>
-                      <option value="LOW">LOW</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
-                      Due Date
-                    </label>
-                    <input
-                      type="date"
-                      value={newTaskDueDate}
-                      onChange={(e) => setNewTaskDueDate(e.target.value)}
-                      className="sims-input text-xs w-full"
-                    />
-                  </div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-xs font-bold text-slate-900">{task.title}</h4>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700">
+                              {task.source || "Company Provided"}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
+                            {task.description || "Corporate engineering milestone deliverable."}
+                          </p>
+                        </div>
+                        <StatusBadge status={task.status || (task.is_completed ? "COMPLETED" : "PENDING")} size="sm" />
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 flex flex-col gap-1 text-[10px] text-slate-500">
+                        <div className="flex items-center justify-between">
+                          <span>Assigned By:</span>
+                          <strong className="text-teal-700">{task.assigned_by || task.company_coordinator_name || "Company Coordinator"}</strong>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Due Date:</span>
+                          <span>{task.due_date ? new Date(task.due_date).toLocaleDateString() : "Flexible"}</span>
+                        </div>
+                        {task.score !== null && task.score !== undefined && (
+                          <div className="flex items-center justify-between font-semibold text-emerald-700">
+                            <span>Your Score:</span>
+                            <span>{task.score} / 100</span>
+                          </div>
+                        )}
+                        {task.feedback && (
+                          <p className="italic text-slate-600 bg-slate-50 p-1.5 rounded border border-slate-200/60 mt-0.5">
+                            &ldquo;{task.feedback}&rdquo;
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="pt-1 flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenTaskEvaluationModal(task)}
+                          className="px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-bold rounded-lg transition-colors inline-flex items-center gap-1 shadow-2xs"
+                        >
+                          <Star size={11} />
+                          <span>{task.score !== null && task.score !== undefined ? "Update Score & Feedback" : "Evaluate & Grade Task"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={submittingTask || !newTaskTitle.trim()}
-                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                >
-                  <Plus size={14} />
-                  <span>{submittingTask ? "Assigning Task..." : "Assign Task to Student"}</span>
-                </button>
-
-                {taskSuccessMsg && (
-                  <div className="p-3 rounded-xl text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    ✓ {taskSuccessMsg}
-                  </div>
-                )}
-              </form>
+              )}
             </GlassCard>
 
             <GlassCard className="p-5 sm:p-6 border-slate-200/80">
@@ -1396,6 +1447,111 @@ export default function FacultyStudentMonitoringPage() {
               </div>
             )}
           </div>
+        </Modal>
+      )}
+
+      {/* Task Evaluation Modal */}
+      {selectedTaskForEvaluation && (
+        <Modal
+          isOpen={Boolean(selectedTaskForEvaluation)}
+          onClose={() => setSelectedTaskForEvaluation(null)}
+          title="Faculty Task Evaluation & Grading"
+          subtitle={`${selectedTaskForEvaluation.title} • Assigned by ${selectedTaskForEvaluation.assigned_by || "Company Coordinator"}`}
+          size="md"
+        >
+          <form onSubmit={handleSubmitTaskEvaluation} className="space-y-4">
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Intern:</span>
+                <strong className="text-slate-800">{studentDetail?.student_name}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Assigned By:</span>
+                <strong className="text-teal-700">{selectedTaskForEvaluation?.assigned_by || "Company Coordinator"}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Completion Status:</span>
+                <strong className={selectedTaskForEvaluation?.is_completed ? "text-emerald-700 font-bold" : "text-amber-700 font-bold"}>
+                  {selectedTaskForEvaluation?.is_completed ? "COMPLETED by Student" : "IN PROGRESS / PENDING"}
+                </strong>
+              </div>
+              {selectedTaskForEvaluation?.task_link && (
+                <div className="flex justify-between items-center pt-1 border-t border-slate-200">
+                  <span className="text-slate-400">Submitted Task Link:</span>
+                  <a
+                    href={selectedTaskForEvaluation.task_link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 hover:underline font-bold inline-flex items-center gap-1"
+                  >
+                    <span className="truncate max-w-[200px]">{selectedTaskForEvaluation.task_link}</span>
+                    <ExternalLink size={11} />
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Evaluation Grade / Score (0–100) <span className="text-rose-500">*</span>
+                </label>
+                <span className="text-sm font-black text-teal-700">{taskScore} / 100</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={taskScore}
+                onChange={(e) => setTaskScore(Number(e.target.value))}
+                className="w-full accent-teal-600 cursor-pointer"
+              />
+              <div className="flex justify-between text-[10px] text-slate-400 font-semibold mt-1">
+                <span>Pass (60)</span>
+                <span>Good (75)</span>
+                <span>Exemplary (90+)</span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                Written Faculty Feedback &amp; Quality Assessment <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                rows={4}
+                value={taskFeedback}
+                onChange={(e) => setTaskFeedback(e.target.value)}
+                required
+                className="sims-textarea text-xs w-full"
+                placeholder="Provide constructive assessment of deliverable quality, engineering rigor, and execution..."
+              />
+            </div>
+
+            {taskEvalSuccessMsg && (
+              <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800">
+                ✓ {taskEvalSuccessMsg}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSelectedTaskForEvaluation(null)}
+                className="stitch-pill-btn text-xs py-2 px-4"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={evaluatingTask || !taskFeedback.trim()}
+                className="btn-primary text-xs py-2 px-5 inline-flex items-center gap-1.5"
+              >
+                <Star size={13} />
+                <span>{evaluatingTask ? "Submitting..." : "Submit Task Evaluation"}</span>
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
 

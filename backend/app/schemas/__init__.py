@@ -116,6 +116,67 @@ class MentorOut(BaseModel):
 
 
 # ==============================================================================
+# External Mentor / Company Coordinator Schemas
+# ==============================================================================
+
+class ExternalMentorCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=128)
+    full_name: str = Field(..., min_length=2, max_length=255)
+    company_id: int
+    phone: Optional[str] = Field(default=None, max_length=50)
+    designation: Optional[str] = Field(default="Company Internship Coordinator", max_length=100)
+    assigned_student_ids: Optional[List[int]] = []
+
+
+class ExternalMentorUpdate(BaseModel):
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=50)
+    designation: Optional[str] = Field(default=None, max_length=100)
+    company_id: Optional[int] = None
+    is_active: Optional[bool] = None
+    assigned_student_ids: Optional[List[int]] = None
+
+
+class ExternalMentorOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    user_id: int
+    company_id: int
+    company_name: str
+    full_name: str
+    email: str
+    phone: Optional[str] = None
+    designation: str
+    is_active: bool = True
+    assigned_students_count: int = 0
+    assigned_students: List[Dict[str, Any]] = []
+    created_at: datetime
+    updated_at: datetime
+
+
+class ExternalMentorAssignRequest(BaseModel):
+    student_ids: List[int]
+    action: Optional[str] = "assign"  # "assign" or "remove"
+
+
+class CompanyCoordinatorInfo(BaseModel):
+    id: int
+    user_id: int
+    name: str
+    email: str
+    coordinator_name: Optional[str] = None
+    coordinator_email: Optional[str] = None
+    phone: Optional[str] = None
+    designation: str
+    company_id: int
+    company_name: str
+    internship_id: Optional[int] = None
+    internship_title: Optional[str] = None
+
+
+# ==============================================================================
 # Company & Internship Schemas
 # ==============================================================================
 
@@ -215,6 +276,8 @@ class InternshipOut(BaseModel):
     mentor_name: Optional[str] = None
     student_id: Optional[int] = None
     student_name: Optional[str] = None
+    company_coordinator_name: Optional[str] = None
+    company_coordinator_email: Optional[str] = None
     created_at: datetime
 
 
@@ -264,14 +327,30 @@ class ApplicationReview(BaseModel):
     review_notes: Optional[str] = None
 
 
+class TaskCreateByCoordinator(BaseModel):
+    student_id: int
+    title: str = Field(..., min_length=1, max_length=255)
+    description: Optional[str] = None
+    priority: Optional[str] = "MEDIUM"
+    due_date: Optional[datetime] = None
+
+
+class TaskEvaluationPayload(BaseModel):
+    feedback: str = Field(..., min_length=1)
+    score: Optional[float] = Field(None, ge=0.0, le=100.0)
+
+
 class TaskOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     internship_id: int
     student_id: int
+    student_name: Optional[str] = None
     application_id: Optional[int] = None
     mentor_id: Optional[int] = None
+    internal_mentor_name: Optional[str] = None
+    external_mentor_id: Optional[int] = None
     internship_title: Optional[str] = None
     company_name: Optional[str] = None
     title: str
@@ -281,6 +360,14 @@ class TaskOut(BaseModel):
     due_date: Optional[datetime] = None
     is_completed: bool
     completed_at: Optional[datetime] = None
+    company_coordinator_name: Optional[str] = None
+    company_coordinator_email: Optional[str] = None
+    assigned_by: Optional[str] = "Company Coordinator"
+    source: Optional[str] = "Company Provided"
+    feedback: Optional[str] = None
+    score: Optional[float] = None
+    task_link: Optional[str] = None
+    evidence_url: Optional[str] = None
     created_at: datetime
 
 
@@ -312,6 +399,8 @@ class ApplicationOut(BaseModel):
     tasks_total: int = 0
     tasks_completed: int = 0
     tasks: List[TaskOut] = []
+    company_coordinator_name: Optional[str] = None
+    company_coordinator_email: Optional[str] = None
 
 
 # ==============================================================================
@@ -325,6 +414,7 @@ class TaskCreate(BaseModel):
     priority: Optional[str] = "MEDIUM"
     internship_id: Optional[int] = None
     application_id: Optional[int] = None
+    source: Optional[str] = None
 
 
 class TaskUpdate(BaseModel):
@@ -332,7 +422,7 @@ class TaskUpdate(BaseModel):
 
 
 # ==============================================================================
-# Weekly Report Schemas
+# Weekly Report & Timesheet Schemas
 # ==============================================================================
 
 class WeeklyReportCreate(BaseModel):
@@ -342,6 +432,18 @@ class WeeklyReportCreate(BaseModel):
     evidence_url: Optional[str] = Field(default=None, max_length=500)
     require_evidence: Optional[bool] = False
     hours_spent: float = Field(default=40.0, ge=0, le=168)  # max 168 hours/week
+    task_id: Optional[int] = None
+    task_title: Optional[str] = None
+    task_link: Optional[str] = None
+
+
+class TimesheetTaskSubmission(BaseModel):
+    task_id: Optional[int] = None
+    task_title: str
+    task_link: str
+    hours_spent: Optional[float] = 8.0
+    week_number: Optional[int] = None
+    notes: Optional[str] = None
 
 
 class WeeklyReportReview(BaseModel):
@@ -364,6 +466,9 @@ class WeeklyReportOut(BaseModel):
     status: str
     mentor_feedback: Optional[str] = None
     mentor_score: Optional[float] = None
+    task_id: Optional[int] = None
+    task_title: Optional[str] = None
+    task_link: Optional[str] = None
     submitted_at: datetime
     reviewed_at: Optional[datetime] = None
 
@@ -560,6 +665,8 @@ class InstitutionalAnalyticsSchema(BaseModel):
 class MessageCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=5000)
     student_id: Optional[int] = None
+    recipient_role: Optional[str] = None  # "MENTOR" or "EXTERNAL_MENTOR"
+    external_mentor_id: Optional[int] = None
 
 
 class MessageOut(BaseModel):
@@ -572,7 +679,8 @@ class MessageOut(BaseModel):
     receiver_id: int
     receiver_name: str
     student_id: int
-    mentor_id: int
+    mentor_id: Optional[int] = None
+    external_mentor_id: Optional[int] = None
     content: str
     is_read: bool
     created_at: datetime

@@ -9,6 +9,8 @@ from backend.app.models import (
     Application,
     Certificate,
     Company,
+    ExternalMentor,
+    ExternalMentorStudent,
     Internship,
     KnowledgeHandoff,
     Mentor,
@@ -80,6 +82,7 @@ def _format_message_out(msg: Message, db: Session) -> MessageOut:
         receiver_name=receiver.full_name if receiver else "Unknown",
         student_id=msg.student_id,
         mentor_id=msg.mentor_id,
+        external_mentor_id=getattr(msg, "external_mentor_id", None),
         content=msg.content,
         is_read=msg.is_read,
         created_at=msg.created_at,
@@ -183,13 +186,60 @@ def _sync_user_notifications(user: User, db: Session) -> None:
         db.commit()
 
 
+def _resolve_student_external_mentor(student: Student, db: Session) -> Optional[ExternalMentor]:
+    direct_link = (
+        db.query(ExternalMentorStudent)
+        .filter(ExternalMentorStudent.student_id == student.id)
+        .first()
+    )
+    if direct_link:
+        return db.query(ExternalMentor).filter(ExternalMentor.id == direct_link.external_mentor_id).first()
+
+    active_int = (
+        db.query(Internship)
+        .filter(Internship.student_id == student.id)
+        .first()
+    )
+    if not active_int:
+        app = (
+            db.query(Application)
+            .filter(Application.student_id == student.id, Application.status.in_(["APPROVED", "SELECTED", "ACCEPTED"]))
+            .first()
+        )
+        if app:
+            active_int = app.internship
+
+    if active_int and active_int.company_id:
+        return db.query(ExternalMentor).filter(ExternalMentor.company_id == active_int.company_id).first()
+
+    return None
+
+
+def _get_authorized_external_mentor_student_ids(ext_mentor: ExternalMentor, db: Session) -> set[int]:
+    student_ids = {
+        s.student_id
+        for s in db.query(ExternalMentorStudent).filter(ExternalMentorStudent.external_mentor_id == ext_mentor.id).all()
+    }
+    company_internships = (
+        db.query(Internship)
+        .filter(Internship.company_id == ext_mentor.company_id, Internship.student_id.isnot(None))
+        .all()
+    )
+    for ci in company_internships:
+        if ci.student_id:
+            student_ids.add(ci.student_id)
+    return student_ids
+
+
 @router.get("/messages", response_model=List[MessageOut])
 def get_messages(
     student_id: Optional[int] = Query(default=None),
+    recipient_role: Optional[str] = Query(default=None),
+    coordinator: Optional[bool] = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Returns messages between an assigned Student and Mentor with strict RBAC."""
+    """Returns messages between an assigned Student and Mentor/External Mentor with strict RBAC."""
     if current_user.role == "STUDENT":
         student = current_user.student_profile
         if not student:
@@ -197,14 +247,77 @@ def get_messages(
         if student_id is not None and student_id != student.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Students can only access their own mentor conversation",
+                detail="Students can only access their own conversation",
             )
+
+        if (recipient_role and recipient_role.upper() == "EXTERNAL_MENTOR") or coordinator is True:
+            ext_mentor = _resolve_student_external_mentor(student, db)
+            if not ext_mentor:
+                return []
+            msgs = (
+                db.query(Message)
+                .filter(
+                    Message.student_id == student.id,
+                    (
+                        (Message.external_mentor_id == ext_mentor.id)
+                        | (Message.sender_id == ext_mentor.user_id)
+                        | (Message.receiver_id == ext_mentor.user_id)
+                    )
+                )
+                .order_by(Message.created_at.asc(), Message.id.asc())
+                .all()
+            )
+            return [_format_message_out(m, db) for m in msgs]
+
         mentor = _resolve_student_mentor(student, db)
         if not mentor:
             return []
         msgs = (
             db.query(Message)
-            .filter(Message.student_id == student.id)
+            .filter(
+                Message.student_id == student.id,
+                Message.external_mentor_id.is_(None)
+            )
+            .order_by(Message.created_at.asc(), Message.id.asc())
+            .all()
+        )
+        return [_format_message_out(m, db) for m in msgs]
+
+    elif current_user.role == "EXTERNAL_MENTOR":
+        ext_mentor = current_user.external_mentor_profile
+        if not ext_mentor:
+            raise HTTPException(status_code=404, detail="External mentor profile not found")
+
+        auth_student_ids = _get_authorized_external_mentor_student_ids(ext_mentor, db)
+
+        if student_id is not None:
+            if student_id not in auth_student_ids:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You are not authorized to view messages for an unassigned student",
+                )
+            msgs = (
+                db.query(Message)
+                .filter(
+                    Message.student_id == student_id,
+                    (
+                        (Message.external_mentor_id == ext_mentor.id)
+                        | (Message.sender_id == current_user.id)
+                        | (Message.receiver_id == current_user.id)
+                    )
+                )
+                .order_by(Message.created_at.asc(), Message.id.asc())
+                .all()
+            )
+            return [_format_message_out(m, db) for m in msgs]
+
+        msgs = (
+            db.query(Message)
+            .filter(
+                (Message.external_mentor_id == ext_mentor.id)
+                | (Message.sender_id == current_user.id)
+                | (Message.receiver_id == current_user.id)
+            )
             .order_by(Message.created_at.asc(), Message.id.asc())
             .all()
         )
@@ -234,7 +347,11 @@ def get_messages(
 
             msgs = (
                 db.query(Message)
-                .filter(Message.student_id == student.id, Message.mentor_id.in_(mentor_ids))
+                .filter(
+                    Message.student_id == student.id,
+                    Message.mentor_id.in_(mentor_ids),
+                    Message.external_mentor_id.is_(None)
+                )
                 .order_by(Message.created_at.asc(), Message.id.asc())
                 .all()
             )
@@ -242,7 +359,10 @@ def get_messages(
 
         msgs = (
             db.query(Message)
-            .filter(Message.mentor_id.in_(mentor_ids))
+            .filter(
+                Message.mentor_id.in_(mentor_ids),
+                Message.external_mentor_id.is_(None)
+            )
             .order_by(Message.created_at.asc(), Message.id.asc())
             .all()
         )
@@ -264,7 +384,7 @@ def send_message(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Sends a persistent message between an assigned Student and Mentor."""
+    """Sends a persistent message between Student and Mentor / External Mentor."""
     clean_content = payload.content.strip()
     if not clean_content:
         raise HTTPException(status_code=400, detail="Message content cannot be empty")
@@ -278,6 +398,51 @@ def send_message(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Students cannot send messages on behalf of another student",
             )
+
+        # Student messaging External Mentor / Company Coordinator
+        if (payload.recipient_role and payload.recipient_role.upper() == "EXTERNAL_MENTOR") or payload.external_mentor_id is not None:
+            ext_mentor = _resolve_student_external_mentor(student, db)
+            if not ext_mentor or not ext_mentor.user:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No company coordinator assigned yet. You can only message your assigned company coordinator.",
+                )
+            if payload.external_mentor_id and payload.external_mentor_id != ext_mentor.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only message your assigned company coordinator.",
+                )
+
+            # Fallback mentor_id to satisfy NOT NULL foreign key in existing SQLite schema
+            fallback_mentor_id = student.mentor_id or 1
+
+            msg = Message(
+                sender_id=current_user.id,
+                receiver_id=ext_mentor.user_id,
+                student_id=student.id,
+                mentor_id=fallback_mentor_id,
+                external_mentor_id=ext_mentor.id,
+                content=clean_content,
+                is_read=False,
+                created_at=datetime.now(timezone.utc),
+            )
+            db.add(msg)
+
+            db.add(
+                Notification(
+                    user_id=ext_mentor.user_id,
+                    title=f"New Message from {current_user.full_name}",
+                    message=clean_content[:200],
+                    notification_type="MESSAGE",
+                    is_read=False,
+                )
+            )
+
+            db.commit()
+            db.refresh(msg)
+            return _format_message_out(msg, db)
+
+        # Student messaging Internal Faculty Mentor (Default)
         mentor = _resolve_student_mentor(student, db)
         if not mentor or not mentor.user:
             raise HTTPException(
@@ -296,7 +461,6 @@ def send_message(
         )
         db.add(msg)
 
-        # Notify mentor (and demo alias if Dr. Alan Turing)
         mentor_user_ids = [mentor.user_id]
         if mentor.user.email in ("mentor.turing@university.edu", "mentor@demo.com"):
             paired = (
@@ -316,6 +480,52 @@ def send_message(
                     is_read=False,
                 )
             )
+
+        db.commit()
+        db.refresh(msg)
+        return _format_message_out(msg, db)
+
+    elif current_user.role == "EXTERNAL_MENTOR":
+        ext_mentor = current_user.external_mentor_profile
+        if not ext_mentor:
+            raise HTTPException(status_code=404, detail="External mentor profile not found")
+        if payload.student_id is None:
+            raise HTTPException(status_code=400, detail="student_id is required when an external mentor sends a message")
+
+        student = db.query(Student).filter(Student.id == payload.student_id).first()
+        if not student or not student.user:
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        auth_student_ids = _get_authorized_external_mentor_student_ids(ext_mentor, db)
+        if student.id not in auth_student_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only message students assigned to you",
+            )
+
+        fallback_mentor_id = student.mentor_id or 1
+        msg = Message(
+            sender_id=current_user.id,
+            receiver_id=student.user_id,
+            student_id=student.id,
+            mentor_id=fallback_mentor_id,
+            external_mentor_id=ext_mentor.id,
+            content=clean_content,
+            is_read=False,
+            created_at=datetime.now(timezone.utc),
+        )
+        db.add(msg)
+
+        company_name = ext_mentor.company.name if ext_mentor.company else "Company"
+        db.add(
+            Notification(
+                user_id=student.user_id,
+                title=f"New Message from {current_user.full_name} ({company_name})",
+                message=clean_content[:200],
+                notification_type="MESSAGE",
+                is_read=False,
+            )
+        )
 
         db.commit()
         db.refresh(msg)
@@ -370,7 +580,7 @@ def send_message(
         db.refresh(msg)
         return _format_message_out(msg, db)
 
-    raise HTTPException(status_code=403, detail="Only assigned students and mentors can exchange messages")
+    raise HTTPException(status_code=403, detail="Only assigned students, faculty mentors, and external mentors can exchange messages")
 
 
 @router.get("/notifications", response_model=List[NotificationOut])

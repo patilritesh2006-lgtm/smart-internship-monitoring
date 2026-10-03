@@ -1,11 +1,14 @@
 from datetime import datetime, timezone
 from typing import List, Optional
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.core.deps import get_current_student
 from backend.app.models import (
     Application,
+    ExternalMentor,
+    ExternalMentorStudent,
     Internship,
     Mentor,
     Notification,
@@ -22,6 +25,7 @@ from backend.app.routers.internships import (
 )
 from backend.app.schemas import (
     ApplicationOut,
+    CompanyCoordinatorInfo,
     InternshipOut,
     ProgressAttentionResponseSchema,
     ProgressFactorBreakdown,
@@ -29,6 +33,7 @@ from backend.app.schemas import (
     StudentProfileUpdate,
     TaskOut,
     TaskUpdate,
+    TimesheetTaskSubmission,
     WeeklyReportCreate,
     WeeklyReportOut,
 )
@@ -171,17 +176,261 @@ def get_my_tasks(
         .order_by(Task.is_completed.asc(), Task.created_at.asc())
         .all()
     )
-    return [format_task_out(t) for t in tasks]
+    return [format_task_out(t, db=db) for t in tasks]
+
+
+@router.get("/me/company-coordinator", response_model=CompanyCoordinatorInfo)
+def get_my_company_coordinator(
+    student_ctx=Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """Returns the assigned External Mentor / Company Coordinator for the student."""
+    _, student = student_ctx
+
+    # 1. Direct explicit assignment
+    direct_link = (
+        db.query(ExternalMentorStudent)
+        .filter(ExternalMentorStudent.student_id == student.id)
+        .first()
+    )
+    if direct_link:
+        ext_mentor = db.query(ExternalMentor).filter(ExternalMentor.id == direct_link.external_mentor_id).first()
+        if ext_mentor and ext_mentor.user and ext_mentor.company:
+            int_obj = direct_link.internship or (
+                db.query(Internship)
+                .filter(Internship.student_id == student.id)
+                .first()
+            )
+            return CompanyCoordinatorInfo(
+                id=ext_mentor.id,
+                user_id=ext_mentor.user_id,
+                name=ext_mentor.user.full_name,
+                email=ext_mentor.user.email,
+                coordinator_name=ext_mentor.user.full_name,
+                coordinator_email=ext_mentor.user.email,
+                phone=ext_mentor.phone,
+                designation=ext_mentor.designation or "Company Internship Coordinator",
+                company_id=ext_mentor.company_id,
+                company_name=ext_mentor.company.name,
+                internship_id=int_obj.id if int_obj else None,
+                internship_title=int_obj.title if int_obj else None,
+            )
+
+    # 2. Company-level coordinator from active or approved internship
+    active_int = (
+        db.query(Internship)
+        .filter(Internship.student_id == student.id)
+        .first()
+    )
+    if not active_int:
+        app = (
+            db.query(Application)
+            .filter(Application.student_id == student.id, Application.status.in_(["APPROVED", "SELECTED", "ACCEPTED"]))
+            .first()
+        )
+        if app:
+            active_int = app.internship
+
+    if active_int and active_int.company_id:
+        ext_mentor = db.query(ExternalMentor).filter(ExternalMentor.company_id == active_int.company_id).first()
+        if ext_mentor and ext_mentor.user and ext_mentor.company:
+            return CompanyCoordinatorInfo(
+                id=ext_mentor.id,
+                user_id=ext_mentor.user_id,
+                name=ext_mentor.user.full_name,
+                email=ext_mentor.user.email,
+                coordinator_name=ext_mentor.user.full_name,
+                coordinator_email=ext_mentor.user.email,
+                phone=ext_mentor.phone,
+                designation=ext_mentor.designation or "Company Internship Coordinator",
+                company_id=ext_mentor.company_id,
+                company_name=ext_mentor.company.name,
+                internship_id=active_int.id,
+                internship_title=active_int.title,
+            )
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="No company coordinator assigned yet",
+    )
+
+
+def _is_valid_url(url: Optional[str]) -> bool:
+    if not url or not isinstance(url, str):
+        return False
+    clean = url.strip()
+    try:
+        parsed = urlparse(clean)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            return False
+        if "." not in parsed.netloc and parsed.netloc.lower() not in ("localhost", "127.0.0.1"):
+            return False
+        return True
+    except Exception:
+        return False
+
+
+def _validate_and_complete_company_task(
+    db: Session,
+    student: Student,
+    user: User,
+    task_id: Optional[int],
+    task_title: Optional[str],
+    task_link: Optional[str],
+) -> Task:
+    # 6. Task Title is present
+    if not task_title or not task_title.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task Title is required for timesheet task completion",
+        )
+
+    # 7. Task Link is present
+    if not task_link or not task_link.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task Link / URL is required for timesheet task completion",
+        )
+
+    # 8. Task Link is a valid URL
+    clean_link = task_link.strip()
+    if not _is_valid_url(clean_link):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task Link must be a valid URL (e.g. https://github.com/student/project-task)",
+        )
+
+    # 5. Task exists
+    task = None
+    if task_id:
+        task = db.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task with ID {task_id} not found",
+            )
+    else:
+        # Match by student and title
+        task = (
+            db.query(Task)
+            .filter(Task.student_id == student.id, Task.title.ilike(task_title.strip()))
+            .first()
+        )
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task with title '{task_title.strip()}' not found",
+            )
+
+    # 2 & 10. Student owns the task / student is not trying to complete another student's task
+    if task.student_id != student.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden: You do not own this milestone task",
+        )
+
+    # Submitted Task Title should correspond to the selected task
+    if task.title.strip().lower() != task_title.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Submitted Task Title '{task_title.strip()}' does not match the selected task '{task.title}'",
+        )
+
+    # 3. Task is a Company Provided Task
+    is_company_task = (task.source == "Company Provided") or (task.external_mentor_id is not None)
+    if not is_company_task:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task is not a Company Provided Task",
+        )
+
+    # 4. Task belongs to the student's relevant internship/company
+    student_company_ids = set()
+    for int_obj in db.query(Internship).filter(Internship.student_id == student.id).all():
+        if int_obj.company_id:
+            student_company_ids.add(int_obj.company_id)
+    for app in db.query(Application).filter(Application.student_id == student.id).all():
+        if app.internship and app.internship.company_id:
+            student_company_ids.add(app.internship.company_id)
+    for link in db.query(ExternalMentorStudent).filter(ExternalMentorStudent.student_id == student.id).all():
+        if link.external_mentor and link.external_mentor.company_id:
+            student_company_ids.add(link.external_mentor.company_id)
+
+    student_int_ids = {i.id for i in db.query(Internship).filter(Internship.student_id == student.id).all()}
+    task_company_id = None
+    if task.internship and task.internship.company_id:
+        task_company_id = task.internship.company_id
+    elif task.external_mentor and task.external_mentor.company_id:
+        task_company_id = task.external_mentor.company_id
+
+    if student_company_ids and task_company_id and (task_company_id not in student_company_ids) and (task.internship_id not in student_int_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task does not belong to your assigned internship or company",
+        )
+
+    # 9. The task is not already completed
+    if task.is_completed or task.status == "COMPLETED":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Task is already completed",
+        )
+
+    # AUTOMATIC COMPLETION: Update the SAME existing Task record
+    task.is_completed = True
+    task.status = "COMPLETED"
+    task.completed_at = datetime.now(timezone.utc)
+    task.task_link = clean_link
+
+    # NOTIFICATIONS: Notify Internal Faculty Mentor and Company Coordinator
+    # 1. Notify Internal Faculty Mentor
+    target_mentor_id = student.mentor_id or getattr(task, "mentor_id", None)
+    if not target_mentor_id and task.internship:
+        target_mentor_id = task.internship.mentor_id
+    if target_mentor_id:
+        mentor = db.query(Mentor).filter(Mentor.id == target_mentor_id).first()
+        if mentor and mentor.user_id:
+            db.add(
+                Notification(
+                    user_id=mentor.user_id,
+                    title="Student Completed Company Task via Timesheet",
+                    message=f"Student {user.full_name} completed the company task: {task.title}.",
+                    notification_type="TASK_COMPLETED",
+                    is_read=False,
+                )
+            )
+
+    # 2. Notify Company Coordinator / External Mentor
+    ext_m = None
+    if getattr(task, "external_mentor_id", None):
+        ext_m = db.query(ExternalMentor).filter(ExternalMentor.id == task.external_mentor_id).first()
+    elif task.internship and task.internship.company_id:
+        ext_m = db.query(ExternalMentor).filter(ExternalMentor.company_id == task.internship.company_id).first()
+
+    if ext_m and ext_m.user_id:
+        db.add(
+            Notification(
+                user_id=ext_m.user_id,
+                title="Student Completed Company Task via Timesheet",
+                message=f"Student {user.full_name} completed the company task: {task.title}.",
+                notification_type="TASK_COMPLETED",
+                is_read=False,
+            )
+        )
+
+    return task
 
 
 @router.post("/me/tasks/{task_id}/toggle", response_model=TaskOut)
 @router.patch("/me/tasks/{task_id}/toggle", response_model=TaskOut)
+@router.post("/tasks/{task_id}/toggle", response_model=TaskOut)
+@router.patch("/tasks/{task_id}/toggle", response_model=TaskOut)
 def toggle_task_completion(
     task_id: int,
     student_ctx=Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    """Toggles completion status for a task assigned to the student and notifies Mentor on completion."""
+    """Rejects direct completion for Company Provided Tasks. For non-company tasks, toggles completion status."""
     user, student = student_ctx
     task = db.query(Task).filter(Task.id == task_id).first()
     if not task:
@@ -192,31 +441,47 @@ def toggle_task_completion(
             detail="Forbidden: You do not own this milestone task",
         )
 
+    # For Company Provided Tasks, direct completion from Dashboard/Task list is strictly forbidden.
+    is_company_task = (task.source == "Company Provided") or (task.external_mentor_id is not None)
+    if is_company_task:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Direct completion is disabled for Company Provided Tasks. Submit task title and task link in Timesheet to complete this task.",
+        )
+
     task.is_completed = not task.is_completed
     task.completed_at = datetime.now(timezone.utc) if task.is_completed else None
     task.status = "COMPLETED" if task.is_completed else "PENDING"
-
-    if task.is_completed:
-        target_mentor_id = student.mentor_id or getattr(task, "mentor_id", None)
-        if not target_mentor_id and task.internship:
-            target_mentor_id = task.internship.mentor_id
-        if target_mentor_id:
-            mentor = db.query(Mentor).filter(Mentor.id == target_mentor_id).first()
-            if mentor and mentor.user_id:
-                int_title = task.internship.title if task.internship else "Internship"
-                db.add(
-                    Notification(
-                        user_id=mentor.user_id,
-                        title="Student Completed Internship Task",
-                        message=f"{user.full_name} completed task '{task.title}' ({int_title}).",
-                        notification_type="TASK_COMPLETED",
-                        is_read=False,
-                    )
-                )
-
     db.commit()
     db.refresh(task)
-    return format_task_out(task)
+    return format_task_out(task, db=db)
+
+
+@router.post("/me/timesheet/task", response_model=TaskOut)
+@router.post("/me/timesheets/task", response_model=TaskOut)
+@router.post("/me/tasks/timesheet-complete", response_model=TaskOut)
+@router.post("/me/tasks/timesheet-submit", response_model=TaskOut)
+def complete_company_task_via_timesheet(
+    payload: TimesheetTaskSubmission,
+    student_ctx=Depends(get_current_student),
+    db: Session = Depends(get_db),
+):
+    """
+    Submits a Timesheet entry for a Company Provided Task.
+    Validates Task Title and Task Link, and marks the SAME Task record as COMPLETED.
+    """
+    user, student = student_ctx
+    task = _validate_and_complete_company_task(
+        db=db,
+        student=student,
+        user=user,
+        task_id=payload.task_id,
+        task_title=payload.task_title,
+        task_link=payload.task_link,
+    )
+    db.commit()
+    db.refresh(task)
+    return format_task_out(task, db=db)
 
 
 @router.get("/me/reports", response_model=List[WeeklyReportOut])
@@ -236,12 +501,14 @@ def get_my_reports(
 
 
 @router.post("/me/reports", response_model=WeeklyReportOut, status_code=status.HTTP_201_CREATED)
+@router.post("/me/timesheet", response_model=WeeklyReportOut, status_code=status.HTTP_201_CREATED)
+@router.post("/me/timesheets", response_model=WeeklyReportOut, status_code=status.HTTP_201_CREATED)
 def submit_weekly_report(
     payload: WeeklyReportCreate,
     student_ctx=Depends(get_current_student),
     db: Session = Depends(get_db),
 ):
-    """Submits a new weekly progress report and notifies the assigned Mentor."""
+    """Submits a new weekly progress report/timesheet and optionally completes an assigned Company Task."""
     user, student = student_ctx
     internship = (
         db.query(Internship)
@@ -261,6 +528,21 @@ def submit_weekly_report(
             if "Evidence Reference:" in line:
                 clean_evidence = line.split("Evidence Reference:", 1)[1].strip()
                 break
+
+    # If payload links a company task, perform validation and automatic completion!
+    completed_task = None
+    if payload.task_id or payload.task_title:
+        task_link_to_use = payload.task_link or clean_evidence
+        completed_task = _validate_and_complete_company_task(
+            db=db,
+            student=student,
+            user=user,
+            task_id=payload.task_id,
+            task_title=payload.task_title,
+            task_link=task_link_to_use,
+        )
+        if not clean_evidence and completed_task.task_link:
+            clean_evidence = completed_task.task_link
 
     if payload.require_evidence and not clean_evidence:
         raise HTTPException(
@@ -288,6 +570,8 @@ def submit_weekly_report(
         evidence_url=clean_evidence,
         hours_spent=payload.hours_spent,
         status="SUBMITTED",
+        task_id=completed_task.id if completed_task else payload.task_id,
+        task_title=completed_task.title if completed_task else payload.task_title,
     )
     db.add(report)
 

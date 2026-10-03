@@ -103,7 +103,9 @@ export const api = {
   toggleTask: (taskId: number) => request<any>(`/students/me/tasks/${taskId}/toggle`, { method: "POST" }),
   getMyReports: () => request<any>("/students/me/reports"),
   submitReport: (data: any) => request<any>("/students/me/reports", { method: "POST", body: JSON.stringify(data) }),
+  submitTimesheetTask: (data: any) => request<any>("/students/me/timesheet/task", { method: "POST", body: JSON.stringify(data) }),
   getMyAttention: () => request<any>("/students/me/attention"),
+  getMyCompanyCoordinator: () => request<any>("/students/me/company-coordinator"),
 
   // Mentor endpoints
   getMyMentorProfile: () => request<any>("/mentors/me"),
@@ -161,6 +163,13 @@ export const api = {
   getInstitutionalAnalytics: () => request<any>("/admin/analytics"),
   listAdminReports: () => request<any[]>("/admin/reports"),
   listAdminInterventions: () => request<any[]>("/admin/interventions"),
+  listAdminExternalMentors: () => request<any[]>("/admin/external-mentors"),
+  createAdminExternalMentor: (data: any) =>
+    request<any>("/admin/external-mentors", { method: "POST", body: JSON.stringify(data) }),
+  updateAdminExternalMentor: (id: number, data: any) =>
+    request<any>(`/admin/external-mentors/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  assignAdminExternalMentor: (id: number, data: { student_ids: number[]; action?: string }) =>
+    request<any>(`/admin/external-mentors/${id}/assign`, { method: "POST", body: JSON.stringify(data) }),
 
   // Companies endpoints
   listCompanies: (activeOnly = false) =>
@@ -280,11 +289,29 @@ export const api = {
     window.URL.revokeObjectURL(url);
   },
 
+  // External Mentor endpoints
+  getMyExternalMentorProfile: () => request<any>("/external-mentors/me"),
+  getExternalMentorStudents: () => request<any[]>("/external-mentors/me/students"),
+  getExternalMentorTasks: () => request<any[]>("/external-mentors/me/tasks"),
+  createExternalMentorTask: (data: { student_id: number; title: string; description?: string; priority?: string; due_date?: string }) =>
+    request<any>("/external-mentors/me/tasks", { method: "POST", body: JSON.stringify(data) }),
+  evaluateMentorTask: (taskId: number, data: { feedback: string; score?: number }) =>
+    request<any>(`/mentors/tasks/${taskId}/evaluate`, { method: "POST", body: JSON.stringify(data) }),
+
   // Communications & Notifications endpoints
-  getMessages: (studentId?: number) =>
-    request<any[]>(studentId ? `/messages?student_id=${studentId}` : "/messages"),
-  sendMessage: (data: { content: string; student_id?: number }) =>
-    request<any>("/messages", { method: "POST", body: JSON.stringify(data) }),
+  getMessages: (studentId?: number, recipientRole?: string) => {
+    const params = new URLSearchParams();
+    if (studentId) params.append("student_id", String(studentId));
+    if (recipientRole) params.append("recipient_role", recipientRole);
+    const qs = params.toString() ? `?${params.toString()}` : "";
+    return request<any[]>(`/messages${qs}`);
+  },
+  sendMessage: (data: {
+    content: string;
+    student_id?: number;
+    recipient_role?: string;
+    external_mentor_id?: number;
+  }) => request<any>("/messages", { method: "POST", body: JSON.stringify(data) }),
   getNotifications: () => request<any[]>("/notifications"),
   markNotificationRead: (id: number) =>
     request<any>(`/notifications/${id}/read`, { method: "POST" }),

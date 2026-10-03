@@ -127,6 +127,19 @@ export function Sidebar({
         },
       ];
     }
+    if (role === "EXTERNAL_MENTOR") {
+      return [
+        {
+          sectionTitle: "COMPANY COORDINATOR",
+          items: [
+            { id: "overview", label: "Dashboard", icon: <LayoutDashboard size={17} /> },
+            { id: "students", label: "Assigned Students", icon: <Users size={17} /> },
+            { id: "tasks", label: "Company Tasks", icon: <Briefcase size={17} /> },
+            { id: "messages", label: "Direct Comms", icon: <MessageSquare size={17} />, hasDot: true },
+          ],
+        },
+      ];
+    }
     // ADMIN
     return [
       {

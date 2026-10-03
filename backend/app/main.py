@@ -24,6 +24,7 @@ from backend.app.routers import (
     analytics_router,
     auth_router,
     communications_router,
+    external_mentors_router,
     internships_router,
     mentors_router,
     students_router,
@@ -240,6 +241,7 @@ app.include_router(mentors_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(analytics_router, prefix=settings.API_V1_STR)
 app.include_router(communications_router, prefix=settings.API_V1_STR)
+app.include_router(external_mentors_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/health")

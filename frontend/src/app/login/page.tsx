@@ -78,6 +78,17 @@ const demoAccounts = [
     statusText: "Dean",
     statusBadge: "bg-slate-100 text-slate-800 border border-slate-200",
   },
+  {
+    initials: "JS",
+    initialsBg: "bg-teal-600 text-white",
+    name: "John Smith",
+    roleLabel: "Company Coordinator",
+    displayEmail: "john@company.com",
+    loginEmail: "john@company.com",
+    password: "Coordinator@123",
+    statusText: "Microsoft",
+    statusBadge: "bg-teal-50 text-teal-700 border border-teal-200",
+  },
 ];
 
 export default function LoginPage() {
@@ -107,6 +118,7 @@ export default function LoginPage() {
       if (session.role === "STUDENT") router.push("/student");
       else if (session.role === "MENTOR") router.push("/mentor");
       else if (session.role === "ADMIN") router.push("/admin");
+      else if (session.role === "EXTERNAL_MENTOR") router.push("/external-mentor");
       else router.push("/");
     } catch (err: any) {
       setError(err.message || "Authentication failed. Check your credentials.");

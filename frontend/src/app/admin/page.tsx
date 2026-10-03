@@ -83,6 +83,19 @@ export default function AdminPortal() {
   const [newDepPrereq, setNewDepPrereq] = useState("");
   const [savingSkillDep, setSavingSkillDep] = useState(false);
 
+  // External Mentor / Company Coordinator State
+  const [externalMentors, setExternalMentors] = useState<any[]>([]);
+  const [showExtMentorModal, setShowExtMentorModal] = useState(false);
+  const [editingExtMentorId, setEditingExtMentorId] = useState<number | null>(null);
+  const [extName, setExtName] = useState("");
+  const [extEmail, setExtEmail] = useState("");
+  const [extPassword, setExtPassword] = useState("");
+  const [extCompanyId, setExtCompanyId] = useState<string>("");
+  const [extDesignation, setExtDesignation] = useState("Company Internship Coordinator");
+  const [extPhone, setExtPhone] = useState("");
+  const [extAssignedStudentIds, setExtAssignedStudentIds] = useState<number[]>([]);
+  const [savingExtMentor, setSavingExtMentor] = useState(false);
+
   // Queue Processing & Mentor Mapping
   const [selectedMentorMap, setSelectedMentorMap] = useState<Record<number, number>>({});
   const [studentMentorDraftMap, setStudentMentorDraftMap] = useState<Record<number, string>>({});
@@ -155,6 +168,7 @@ export default function AdminPortal() {
         depsRes,
         handoffsRes,
         certsRes,
+        extMentsRes,
       ] = await Promise.allSettled([
         api.getInstitutionalAnalytics(),
         api.listApplications(),
@@ -168,6 +182,7 @@ export default function AdminPortal() {
         api.listAdminSkillDependencies().catch(() => api.listSkillDependencies()),
         api.listAdminHandoffs().catch(() => []),
         api.listAdminCertificates().catch(() => []),
+        api.listAdminExternalMentors().catch(() => []),
       ]);
 
       if (anaRes.status === "fulfilled") setAnalytics(anaRes.value);
@@ -190,6 +205,7 @@ export default function AdminPortal() {
       if (depsRes.status === "fulfilled") setAdminSkillDeps(depsRes.value || []);
       if (handoffsRes.status === "fulfilled") setAdminHandoffs(handoffsRes.value || []);
       if (certsRes.status === "fulfilled") setAdminCertificates(certsRes.value || []);
+      if (extMentsRes.status === "fulfilled") setExternalMentors(extMentsRes.value || []);
 
       if (
         anaRes.status === "rejected" &&
@@ -366,6 +382,83 @@ export default function AdminPortal() {
       setError(err.message || "Failed to update company status");
     } finally {
       setTogglingCompanyId(null);
+    }
+  };
+
+  const openAddExtMentorModal = () => {
+    setEditingExtMentorId(null);
+    setExtName("");
+    setExtEmail("");
+    setExtPassword("");
+    setExtCompanyId(companies[0] ? String(companies[0].id) : "");
+    setExtDesignation("Company Internship Coordinator");
+    setExtPhone("");
+    setExtAssignedStudentIds([]);
+    setShowExtMentorModal(true);
+  };
+
+  const openEditExtMentorModal = (mentor: any) => {
+    setEditingExtMentorId(mentor.id);
+    setExtName(mentor.name || "");
+    setExtEmail(mentor.email || "");
+    setExtPassword("");
+    setExtCompanyId(mentor.company_id ? String(mentor.company_id) : "");
+    setExtDesignation(mentor.designation || "Company Internship Coordinator");
+    setExtPhone(mentor.phone || "");
+    setExtAssignedStudentIds(Array.isArray(mentor.assigned_student_ids) ? mentor.assigned_student_ids : []);
+    setShowExtMentorModal(true);
+  };
+
+  const handleSaveExtMentor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!extName.trim() || !extEmail.trim() || !extCompanyId) {
+      setError("Please fill in coordinator name, email, and partner company.");
+      return;
+    }
+    setSavingExtMentor(true);
+    setError(null);
+    try {
+      if (editingExtMentorId) {
+        await api.updateAdminExternalMentor(editingExtMentorId, {
+          name: extName.trim(),
+          email: extEmail.trim(),
+          phone: extPhone.trim() || undefined,
+          designation: extDesignation.trim() || undefined,
+          company_id: Number(extCompanyId),
+        });
+        await api.assignAdminExternalMentor(editingExtMentorId, {
+          student_ids: extAssignedStudentIds,
+        });
+        setActionSuccessMsg(`Updated company coordinator '${extName.trim()}'.`);
+      } else {
+        if (!extPassword.trim()) {
+          setError("Password is required for new company coordinator account.");
+          setSavingExtMentor(false);
+          return;
+        }
+        await api.createAdminExternalMentor({
+          name: extName.trim(),
+          email: extEmail.trim(),
+          password: extPassword.trim(),
+          company_id: Number(extCompanyId),
+          designation: extDesignation.trim() || "Company Internship Coordinator",
+          phone: extPhone.trim() || undefined,
+          student_ids: extAssignedStudentIds,
+        });
+        setActionSuccessMsg(`Added company coordinator '${extName.trim()}' to partner directory.`);
+      }
+      const [updatedList, updatedStuds] = await Promise.all([
+        api.listAdminExternalMentors().catch(() => []),
+        api.listAdminStudents().catch(() => []),
+      ]);
+      setExternalMentors(updatedList || []);
+      setStudents(updatedStuds || []);
+      setShowExtMentorModal(false);
+      setTimeout(() => setActionSuccessMsg(null), 3500);
+    } catch (err: any) {
+      setError(err.message || "Failed to save company coordinator");
+    } finally {
+      setSavingExtMentor(false);
     }
   };
 
@@ -1773,6 +1866,117 @@ export default function AdminPortal() {
       )}
 
       {/* ══════════════════════════════════════════════════════════ */}
+      {/* 7B. EXTERNAL MENTORS / COMPANY COORDINATORS               */}
+      {/* ══════════════════════════════════════════════════════════ */}
+      {(activeTab === "overview" || activeTab === "employers" || activeTab === "cohorts") && (
+      <GlassCard className="p-5 sm:p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+          <div>
+            <SectionHeader
+              title="Company Coordinators / External Mentors"
+              subtitle="Industry coordinators representing partner companies directly supervising intern students"
+              icon={<UserCheck size={16} className="text-emerald-600" />}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200/60">
+              {externalMentors.length} External Coordinators
+            </span>
+            <button
+              onClick={openAddExtMentorModal}
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all inline-flex items-center gap-1"
+            >
+              <Plus size={13} />
+              <span>Add External Mentor</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="border-b border-slate-200 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                <th className="py-3 px-3.5">Coordinator Name</th>
+                <th className="py-3 px-3">Partner Company</th>
+                <th className="py-3 px-3">Designation &amp; Contact</th>
+                <th className="py-3 px-3">Assigned Students</th>
+                <th className="py-3 px-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-xs">
+              {externalMentors.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-6 text-center text-slate-400">
+                    No external mentors / company coordinators added yet. Click &quot;Add External Mentor&quot; above.
+                  </td>
+                </tr>
+              ) : (
+                externalMentors.map((m) => (
+                  <tr key={m.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3 px-3.5">
+                      <strong className="text-slate-900 font-bold block leading-tight">
+                        {m.name}
+                      </strong>
+                      <span className="text-[11px] text-slate-500 block">
+                        {m.email}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200/60">
+                        <Building2 size={12} className="text-blue-600" />
+                        {m.company_name}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className="text-slate-800 font-semibold block">
+                        {m.designation || "Company Internship Coordinator"}
+                      </span>
+                      {m.phone && (
+                        <span className="text-[11px] text-slate-500 block">
+                          📞 {m.phone}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="font-bold text-slate-900">
+                        {m.assigned_students_count ?? (Array.isArray(m.assigned_student_names) ? m.assigned_student_names.length : 0)} Student{(m.assigned_students_count ?? (Array.isArray(m.assigned_student_names) ? m.assigned_student_names.length : 0)) === 1 ? "" : "s"}
+                      </div>
+                      {Array.isArray(m.assigned_student_names) && m.assigned_student_names.length > 0 ? (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {m.assigned_student_names.map((sName: string, idx: number) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-semibold border border-emerald-200/50"
+                            >
+                              {sName}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-[10px] text-slate-400 italic">
+                          No students assigned yet
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <button
+                        onClick={() => openEditExtMentorModal(m)}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors inline-flex items-center gap-1"
+                      >
+                        <Edit3 size={11} />
+                        <span>Edit / Assign</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </GlassCard>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════ */}
       {/* 8. INTERNSHIP MANAGEMENT & PUBLISHING                      */}
       {/* ══════════════════════════════════════════════════════════ */}
       {(activeTab === "overview" ||
@@ -2685,6 +2889,188 @@ export default function AdminPortal() {
                 ✓ {postMsg}
               </div>
             )}
+          </form>
+        </Modal>
+      )}
+
+      {/* Add / Edit External Mentor Modal */}
+      {showExtMentorModal && (
+        <Modal
+          isOpen={showExtMentorModal}
+          onClose={() => setShowExtMentorModal(false)}
+          title={
+            editingExtMentorId
+              ? "Edit Company Coordinator / External Mentor"
+              : "Register Company Coordinator / External Mentor"
+          }
+          subtitle="Configure external mentor profile, partner company representation, and student supervisory assignments."
+          size="lg"
+          footer={
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowExtMentorModal(false)}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="ext-mentor-form"
+                disabled={savingExtMentor}
+                className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg shadow-xs transition-colors inline-flex items-center gap-1.5"
+              >
+                {savingExtMentor && <RefreshCw size={12} className="animate-spin" />}
+                <span>
+                  {savingExtMentor
+                    ? "Saving..."
+                    : editingExtMentorId
+                    ? "Update Coordinator"
+                    : "Create Coordinator"}
+                </span>
+              </button>
+            </div>
+          }
+        >
+          <form id="ext-mentor-form" onSubmit={handleSaveExtMentor} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  value={extName}
+                  onChange={(e) => setExtName(e.target.value)}
+                  placeholder="e.g. John Smith"
+                  required
+                  className="sims-input text-xs w-full"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                  Work Email Address
+                </label>
+                <input
+                  type="email"
+                  value={extEmail}
+                  onChange={(e) => setExtEmail(e.target.value)}
+                  placeholder="e.g. john@company.com"
+                  required
+                  className="sims-input text-xs w-full"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                  Represented Partner Company
+                </label>
+                <select
+                  value={extCompanyId}
+                  onChange={(e) => setExtCompanyId(e.target.value)}
+                  required
+                  className="sims-input text-xs w-full"
+                >
+                  <option value="">-- Select Partner Company --</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={String(c.id)}>
+                      {c.name} ({c.industry || "Technology"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                  Designation / Role Title
+                </label>
+                <input
+                  type="text"
+                  value={extDesignation}
+                  onChange={(e) => setExtDesignation(e.target.value)}
+                  placeholder="e.g. Company Internship Coordinator"
+                  className="sims-input text-xs w-full"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                  Contact Phone (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={extPhone}
+                  onChange={(e) => setExtPhone(e.target.value)}
+                  placeholder="e.g. +1 555-0199"
+                  className="sims-input text-xs w-full"
+                />
+              </div>
+
+              {!editingExtMentorId && (
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1 uppercase tracking-wider">
+                    Initial Login Password
+                  </label>
+                  <input
+                    type="password"
+                    value={extPassword}
+                    onChange={(e) => setExtPassword(e.target.value)}
+                    placeholder="Enter coordinator password"
+                    required
+                    className="sims-input text-xs w-full"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
+                Assign Students for Company Supervision
+              </label>
+              <div className="max-h-40 overflow-y-auto p-2.5 rounded-xl border border-slate-200 bg-slate-50 space-y-1.5">
+                {students.length === 0 ? (
+                  <p className="text-xs text-slate-400">No students available.</p>
+                ) : (
+                  students.map((st: any) => {
+                    const isSelected = extAssignedStudentIds.includes(st.id);
+                    return (
+                      <label
+                        key={st.id}
+                        className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-white text-xs cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setExtAssignedStudentIds([...extAssignedStudentIds, st.id]);
+                            } else {
+                              setExtAssignedStudentIds(extAssignedStudentIds.filter((id) => id !== st.id));
+                            }
+                          }}
+                          className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="font-semibold text-slate-900">{st.full_name}</span>
+                        <span className="text-slate-400">({st.roll_number || st.email})</span>
+                        {st.company_name && (
+                          <span className="ml-auto text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                            {st.company_name}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Selected students will see this coordinator on their dashboard and can exchange direct messages.
+              </p>
+            </div>
           </form>
         </Modal>
       )}

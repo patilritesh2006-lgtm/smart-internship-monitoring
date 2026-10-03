@@ -60,6 +60,36 @@ def format_internship_out(internship: Internship) -> InternshipOut:
         "COMPLETED" if internship.status == "COMPLETED" else "IN_PROGRESS"
     )
 
+    coordinator_name = None
+    coordinator_email = None
+    if internship and internship.company and getattr(internship.company, "external_mentors", None) and len(internship.company.external_mentors) > 0:
+        first_ext = internship.company.external_mentors[0]
+        if first_ext and first_ext.user:
+            coordinator_name = first_ext.user.full_name
+            coordinator_email = first_ext.user.email
+
+    if not coordinator_name and internship and internship.company_id:
+        from sqlalchemy.orm import object_session
+        s = object_session(internship)
+        if s:
+            from backend.app.models import ExternalMentor
+            ext = s.query(ExternalMentor).filter(ExternalMentor.company_id == internship.company_id).first()
+            if ext and ext.user:
+                coordinator_name = ext.user.full_name
+                coordinator_email = ext.user.email
+
+    if not coordinator_name and internship and internship.student_id:
+        from sqlalchemy.orm import object_session
+        s = object_session(internship)
+        if s:
+            from backend.app.models import ExternalMentorStudent, ExternalMentor
+            link = s.query(ExternalMentorStudent).filter(ExternalMentorStudent.student_id == internship.student_id).first()
+            if link:
+                ext = link.external_mentor or s.query(ExternalMentor).filter(ExternalMentor.id == link.external_mentor_id).first()
+                if ext and ext.user:
+                    coordinator_name = ext.user.full_name
+                    coordinator_email = ext.user.email
+
     return InternshipOut(
         id=internship.id,
         title=internship.title,
@@ -82,6 +112,8 @@ def format_internship_out(internship: Internship) -> InternshipOut:
         mentor_name=mentor_name,
         student_id=internship.student_id,
         student_name=student_name,
+        company_coordinator_name=coordinator_name,
+        company_coordinator_email=coordinator_email,
         created_at=internship.created_at,
     )
 
@@ -384,7 +416,7 @@ def unpublish_internship(
     return format_internship_out(internship)
 
 
-def format_task_out(task: Task) -> TaskOut:
+def format_task_out(task: Task, db: Optional[Session] = None) -> TaskOut:
     internship = task.internship
     internship_title = internship.title if internship else None
     company_name = internship.company.name if internship and internship.company else None
@@ -393,28 +425,106 @@ def format_task_out(task: Task) -> TaskOut:
     if due is not None and due.tzinfo is None:
         due = due.replace(tzinfo=timezone.utc)
 
-    if task.is_completed:
+    if task.is_completed or getattr(task, "status", None) == "COMPLETED":
         computed_status = "COMPLETED"
     elif due is not None and due < now:
         computed_status = "OVERDUE"
     else:
         computed_status = getattr(task, "status", None) or "PENDING"
 
+    # 1. Resolve student full name
+    student_name = None
+    student_obj = getattr(task, "student", None)
+    if student_obj and getattr(student_obj, "user", None):
+        student_name = student_obj.user.full_name
+    elif db and task.student_id:
+        from backend.app.models import Student, User
+        st = db.query(Student).filter(Student.id == task.student_id).first()
+        if st:
+            student_obj = st
+            if st.user:
+                student_name = st.user.full_name
+            elif st.user_id:
+                u = db.query(User).filter(User.id == st.user_id).first()
+                if u:
+                    student_name = u.full_name
+
+    # 2. Resolve company coordinator details
+    coordinator_name = None
+    coordinator_email = None
+    ext_mentor = getattr(task, "external_mentor", None)
+    if not ext_mentor and getattr(task, "external_mentor_id", None) and db:
+        from backend.app.models import ExternalMentor
+        ext_mentor = db.query(ExternalMentor).filter(ExternalMentor.id == task.external_mentor_id).first()
+
+    if ext_mentor and ext_mentor.user:
+        coordinator_name = ext_mentor.user.full_name
+        coordinator_email = ext_mentor.user.email
+    elif internship and internship.company and getattr(internship.company, "external_mentors", None):
+        first_ext = internship.company.external_mentors[0]
+        if first_ext and first_ext.user:
+            coordinator_name = first_ext.user.full_name
+            coordinator_email = first_ext.user.email
+    elif db and internship and internship.company_id:
+        from backend.app.models import ExternalMentor
+        first_ext = db.query(ExternalMentor).filter(ExternalMentor.company_id == internship.company_id).first()
+        if first_ext and first_ext.user:
+            coordinator_name = first_ext.user.full_name
+            coordinator_email = first_ext.user.email
+
+    # 3. Resolve Internal Faculty Mentor real full name (never generic text)
+    internal_mentor_name = None
+    mentor_obj = getattr(task, "mentor", None)
+    if mentor_obj and getattr(mentor_obj, "user", None):
+        internal_mentor_name = mentor_obj.user.full_name
+    elif student_obj and getattr(student_obj, "assigned_mentor", None) and getattr(student_obj.assigned_mentor, "user", None):
+        internal_mentor_name = student_obj.assigned_mentor.user.full_name
+    elif internship and getattr(internship, "mentor", None) and getattr(internship.mentor, "user", None):
+        internal_mentor_name = internship.mentor.user.full_name
+    elif db:
+        from backend.app.models import Mentor
+        target_m_id = getattr(task, "mentor_id", None) or (student_obj.mentor_id if student_obj else None)
+        if target_m_id:
+            m = db.query(Mentor).filter(Mentor.id == target_m_id).first()
+            if m and m.user:
+                internal_mentor_name = m.user.full_name
+
+    # 4. Assigned By: MUST be the Company Coordinator, NEVER Internal Mentor
+    if coordinator_name:
+        assigned_by = coordinator_name
+    elif getattr(task, "assigned_by", None):
+        assigned_by = task.assigned_by
+    else:
+        assigned_by = "Company Coordinator"
+
+    source = getattr(task, "source", None) or "Company Provided"
+
     return TaskOut(
         id=task.id,
         internship_id=task.internship_id,
         student_id=task.student_id,
+        student_name=student_name,
         application_id=getattr(task, "application_id", None),
         mentor_id=getattr(task, "mentor_id", None),
+        internal_mentor_name=internal_mentor_name,
+        external_mentor_id=getattr(task, "external_mentor_id", None) or (ext_mentor.id if ext_mentor else None),
         internship_title=internship_title,
         company_name=company_name,
+        company_coordinator_name=coordinator_name,
+        company_coordinator_email=coordinator_email,
+        assigned_by=assigned_by,
+        source=source,
         title=task.title,
         description=task.description,
         priority=getattr(task, "priority", None) or "MEDIUM",
         status=computed_status,
         due_date=task.due_date,
-        is_completed=task.is_completed,
+        is_completed=bool(task.is_completed or getattr(task, "status", None) == "COMPLETED"),
         completed_at=task.completed_at,
+        feedback=getattr(task, "feedback", None),
+        score=getattr(task, "score", None),
+        task_link=getattr(task, "task_link", None),
+        evidence_url=getattr(task, "task_link", None),
         created_at=task.created_at,
     )
 
@@ -531,6 +641,12 @@ def generate_internship_specific_tasks(
         ]
     )
 
+    ext_mentor = None
+    if internship.company_id:
+        from backend.app.models import ExternalMentor
+        ext_mentor = db.query(ExternalMentor).filter(ExternalMentor.company_id == internship.company_id).first()
+    coordinator_name = ext_mentor.user.full_name if ext_mentor and ext_mentor.user else "Company Coordinator"
+
     created_tasks: List[Task] = []
     for spec in task_specs:
         t = Task(
@@ -538,6 +654,9 @@ def generate_internship_specific_tasks(
             student_id=student_id,
             application_id=application_id,
             mentor_id=mentor_id,
+            external_mentor_id=ext_mentor.id if ext_mentor else None,
+            assigned_by=coordinator_name,
+            source="Company Provided",
             title=spec["title"],
             description=spec["description"],
             priority=spec["priority"],
@@ -613,9 +732,29 @@ def build_application_out(db: Session, app: Application) -> ApplicationOut:
         .order_by(Task.id.asc())
         .all()
     )
-    task_outs = [format_task_out(t) for t in tasks]
+    task_outs = [format_task_out(t, db=db) for t in tasks]
     tasks_total = len(task_outs)
-    tasks_completed = sum(1 for t in task_outs if t.is_completed)
+    tasks_completed = sum(1 for t in task_outs if t.is_completed or t.status == "COMPLETED")
+
+    coordinator_name = None
+    coordinator_email = None
+    from backend.app.models import ExternalMentorStudent, ExternalMentor
+    direct_link = (
+        db.query(ExternalMentorStudent)
+        .filter(ExternalMentorStudent.student_id == app.student_id)
+        .first()
+    )
+    if direct_link:
+        ext_m = direct_link.external_mentor or db.query(ExternalMentor).filter(ExternalMentor.id == direct_link.external_mentor_id).first()
+        if ext_m and ext_m.user:
+            coordinator_name = ext_m.user.full_name
+            coordinator_email = ext_m.user.email
+
+    if not coordinator_name and internship and internship.company_id:
+        ext_m = db.query(ExternalMentor).filter(ExternalMentor.company_id == internship.company_id).first()
+        if ext_m and ext_m.user:
+            coordinator_name = ext_m.user.full_name
+            coordinator_email = ext_m.user.email
 
     return ApplicationOut(
         id=app.id,
@@ -643,6 +782,8 @@ def build_application_out(db: Session, app: Application) -> ApplicationOut:
         tasks_total=tasks_total,
         tasks_completed=tasks_completed,
         tasks=task_outs,
+        company_coordinator_name=coordinator_name,
+        company_coordinator_email=coordinator_email,
     )
 
 

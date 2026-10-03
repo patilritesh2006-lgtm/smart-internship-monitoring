@@ -31,6 +31,7 @@ class User(Base):
 
     student_profile = relationship("Student", back_populates="user", uselist=False, cascade="all, delete-orphan")
     mentor_profile = relationship("Mentor", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    external_mentor_profile = relationship("ExternalMentor", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
 class Student(Base):
@@ -71,6 +72,36 @@ class Mentor(Base):
     interventions = relationship("Intervention", back_populates="mentor")
 
 
+class ExternalMentor(Base):
+    __tablename__ = "external_mentors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False, index=True)
+    phone = Column(String(50), nullable=True)
+    designation = Column(String(100), default="Company Internship Coordinator", nullable=False)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+    updated_at = Column(DateTime, default=utc_now, nullable=False)
+
+    user = relationship("User", back_populates="external_mentor_profile")
+    company = relationship("Company", back_populates="external_mentors")
+    assigned_students = relationship("ExternalMentorStudent", back_populates="external_mentor", cascade="all, delete-orphan")
+
+
+class ExternalMentorStudent(Base):
+    __tablename__ = "external_mentor_students"
+
+    id = Column(Integer, primary_key=True, index=True)
+    external_mentor_id = Column(Integer, ForeignKey("external_mentors.id", ondelete="CASCADE"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
+    internship_id = Column(Integer, ForeignKey("internships.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=utc_now, nullable=False)
+
+    external_mentor = relationship("ExternalMentor", back_populates="assigned_students")
+    student = relationship("Student")
+    internship = relationship("Internship")
+
+
 class Company(Base):
     __tablename__ = "companies"
 
@@ -84,6 +115,7 @@ class Company(Base):
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     internships = relationship("Internship", back_populates="company", cascade="all, delete-orphan")
+    external_mentors = relationship("ExternalMentor", back_populates="company", cascade="all, delete-orphan")
 
 
 class Internship(Base):
@@ -172,10 +204,17 @@ class Task(Base):
     due_date = Column(DateTime, nullable=True)
     is_completed = Column(Boolean, default=False, nullable=False)
     completed_at = Column(DateTime, nullable=True)
+    external_mentor_id = Column(Integer, ForeignKey("external_mentors.id", ondelete="SET NULL"), nullable=True)
+    assigned_by = Column(String(255), nullable=True)
+    source = Column(String(100), default="Company Provided", nullable=True)
+    feedback = Column(Text, nullable=True)
+    score = Column(Float, nullable=True)
+    task_link = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=utc_now, nullable=False)
 
     internship = relationship("Internship", back_populates="tasks")
     student = relationship("Student", back_populates="tasks")
+    external_mentor = relationship("ExternalMentor", foreign_keys=[external_mentor_id])
 
 
 class WeeklyReport(Base):
@@ -192,11 +231,14 @@ class WeeklyReport(Base):
     status = Column(String(50), default="SUBMITTED", nullable=False)  # "SUBMITTED", "REVIEWED"
     mentor_feedback = Column(Text, nullable=True)
     mentor_score = Column(Float, nullable=True)  # 0 to 100
+    task_id = Column(Integer, ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    task_title = Column(String(255), nullable=True)
     submitted_at = Column(DateTime, default=utc_now, nullable=False)
     reviewed_at = Column(DateTime, nullable=True)
 
     internship = relationship("Internship", back_populates="reports")
     student = relationship("Student", back_populates="reports")
+    task = relationship("Task")
 
 
 class Intervention(Base):
@@ -223,6 +265,7 @@ class Message(Base):
     receiver_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     student_id = Column(Integer, ForeignKey("students.id", ondelete="CASCADE"), nullable=False, index=True)
     mentor_id = Column(Integer, ForeignKey("mentors.id", ondelete="CASCADE"), nullable=False, index=True)
+    external_mentor_id = Column(Integer, ForeignKey("external_mentors.id", ondelete="SET NULL"), nullable=True, index=True)
     content = Column(Text, nullable=False)
     is_read = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utc_now, nullable=False)
@@ -231,6 +274,7 @@ class Message(Base):
     receiver = relationship("User", foreign_keys=[receiver_id])
     student = relationship("Student")
     mentor = relationship("Mentor")
+    external_mentor = relationship("ExternalMentor", foreign_keys=[external_mentor_id])
 
 
 class Notification(Base):

@@ -4,7 +4,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from backend.app.core.database import get_db
 from backend.app.core.security import decode_access_token
-from backend.app.models import Mentor, Student, User
+from backend.app.models import ExternalMentor, Mentor, Student, User
 
 security_scheme = HTTPBearer(auto_error=False)
 
@@ -93,3 +93,17 @@ def get_current_admin(
 ) -> User:
     """Ensures caller is an Administrator."""
     return current_user
+
+
+def get_current_external_mentor(
+    current_user: User = Depends(require_role(["EXTERNAL_MENTOR"])),
+    db: Session = Depends(get_db),
+) -> Tuple[User, ExternalMentor]:
+    """Ensures caller is an External Mentor / Company Coordinator and returns (User, ExternalMentor) profile."""
+    ext_mentor = db.query(ExternalMentor).filter(ExternalMentor.user_id == current_user.id).first()
+    if not ext_mentor:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="External mentor profile not found for this account",
+        )
+    return current_user, ext_mentor
